@@ -38,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import com.cmc.demoapp.model.CalendarDay
 import com.cmc.demoapp.model.MemoryItem
 import com.cmc.demoapp.model.ScheduleItem
+import com.cmc.demoapp.screen.OnboardingScreen
 import com.cmc.demoapp.viewmodel.MainViewModel
 import java.util.Calendar
 import kotlin.collections.getOrNull
@@ -53,8 +54,14 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
     val schedules = viewModel.dummySchedules
     val memories = viewModel.dummyMemories
 
-    NavHost(navController = navController, startDestination = "nickname") {
-
+    NavHost(navController = navController, startDestination = "onboarding") {
+        composable("onboarding") {
+            OnboardingScreen(
+                viewModel = viewModel,
+                onFinish = { navController.navigate("nickname")
+                }
+            )
+        }
         composable("nickname") {
             NicknameScreen(
                 viewModel = viewModel,

@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.cmc.demoapp.model.MemoryItem
 import com.cmc.demoapp.model.ScheduleItem
+import com.cmc.demoapp.model.OnboardingPage
 import com.koiware.demoapp.R
 
 class MainViewModel : ViewModel() {
@@ -32,4 +33,12 @@ class MainViewModel : ViewModel() {
         MemoryItem(2, R.drawable.dummy_couple_2),
         MemoryItem(3, R.drawable.dummy_couple_3),
     )
+
+    val onboardingPages = listOf(
+        OnboardingPage("주어진 질문에 사진 한 장으로\n둘만의 일상을 공유해요"),
+        OnboardingPage("쌓여가는 둘만의 사진 기록을\n한눈에 확인해요"),
+        OnboardingPage("원하는 사진으로\n둘만의 인생 네컷을 만들어봐요"),
+        OnboardingPage("사진으로 이어지는\n둘만의 일상, 지금 시작해요")
+    )
+
 }

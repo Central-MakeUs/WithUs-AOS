@@ -18,7 +18,6 @@ class ComposeFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        ㄴ대ㅕㅜ휴ㅑㅜ0
         return ComposeView(requireContext()).apply {
             setContent {
                 AppNavigation()
