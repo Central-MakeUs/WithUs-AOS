@@ -1,5 +1,6 @@
 package com.cmc.demoapp.viewmodel
 
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,13 +11,47 @@ import com.cmc.demoapp.model.OnboardingPage
 import com.koiware.demoapp.R
 
 class MainViewModel : ViewModel() {
-    // 닉네임
+    // 1단계: 닉네임
     var nickname by mutableStateOf("")
         private set
+    fun updateNickname(input: String) { nickname = input }
 
-    fun updateNickname(name: String) {
-        nickname = name
+    // 2단계: 생일
+    var birthDate by mutableStateOf("")
+        private set
+    fun updateBirthDate(input: String) {
+        if (input.length <= 8 && input.all { it.isDigit() }) {
+            birthDate = input
+        }
     }
+
+    // 3단계: 첫 만남 기념일
+    var anniversaryDate by mutableStateOf("")
+        private set
+    fun updateAnniversaryDate(input: String) {
+        if (input.length <= 8 && input.all { it.isDigit() }) {
+            anniversaryDate = input
+        }
+    }
+
+    // 4단계: 프로필 이미지 URI
+    var profileImageUri by mutableStateOf<Uri?>(null)
+        private set
+
+    fun updateProfileImage(uri: Uri?) {
+        profileImageUri = uri
+    }
+
+    // 날짜 입력 제한 (8자리)
+    fun updateDateInput(input: String, type: Int) {
+        val digits = input.filter { it.isDigit() }
+        if (digits.length <= 8) {
+            if (type == 2) birthDate = digits else anniversaryDate = digits
+        }
+    }
+
+    var selectedImageUri by mutableStateOf<Uri?>(null)
+        private set
 
     // 1. 일정 더미 데이터
     val dummySchedules = listOf(
@@ -41,4 +76,7 @@ class MainViewModel : ViewModel() {
         OnboardingPage("사진으로 이어지는\n둘만의 일상, 지금 시작해요")
     )
 
+    fun updateSelectedImage(uri: Uri?) {
+        selectedImageUri = uri
+    }
 }

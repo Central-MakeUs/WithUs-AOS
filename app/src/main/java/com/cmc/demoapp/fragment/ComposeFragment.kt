@@ -1,6 +1,5 @@
 package com.cmc.demoapp.fragment
 
-import AppNavigation
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -10,6 +9,7 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.compose.ui.platform.ComposeView // ComposeView 임포트
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import com.cmc.demoapp.screen.AppNavigation
 
 class ComposeFragment : Fragment() {
 

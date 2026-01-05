@@ -1,21 +1,25 @@
+import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.*
@@ -25,72 +29,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
+import androidx.core.content.FileProvider
+import coil.compose.AsyncImage
 import com.cmc.demoapp.model.CalendarDay
 import com.cmc.demoapp.model.MemoryItem
 import com.cmc.demoapp.model.ScheduleItem
-import com.cmc.demoapp.screen.OnboardingScreen
+import com.cmc.demoapp.screen.AppNavigation
+import com.cmc.demoapp.utils.DateMaskTransformation
 import com.cmc.demoapp.viewmodel.MainViewModel
+import java.io.File
 import java.util.Calendar
 import kotlin.collections.getOrNull
-
-// ==========================================
-// 2. Navigation
-// ==========================================
-@Composable
-fun AppNavigation(viewModel: MainViewModel = viewModel()) {
-    val navController = rememberNavController()
-
-    // 뷰모델에서 데이터 가져오기
-    val schedules = viewModel.dummySchedules
-    val memories = viewModel.dummyMemories
-
-    NavHost(navController = navController, startDestination = "onboarding") {
-        composable("onboarding") {
-            OnboardingScreen(
-                viewModel = viewModel,
-                onFinish = { navController.navigate("nickname")
-                }
-            )
-        }
-        composable("nickname") {
-            NicknameScreen(
-                viewModel = viewModel,
-                onNextClick = { if (viewModel.nickname.isNotEmpty()) navController.navigate("home") }
-            )
-        }
-
-        composable("home") {
-            HomeScreen(
-                nickname = viewModel.nickname,
-                schedules = schedules, // 데이터 전달
-                memories = memories,   // 데이터 전달
-                onNavigateToCalendar = { navController.navigate("calendar") }
-            )
-        }
-
-        composable("calendar") {
-            CalendarHomeScreen(
-                nickname = viewModel.nickname,
-                memories = memories,   // 캘린더 화면에도 추억 사진 전달
-                onNavigateToDayUs = { navController.navigate("dayUs") }
-            )
-        }
-
-        composable("dayUs") {
-            DayUsScreen()
-        }
-    }
-}
 
 @Composable
 fun HomeScreen(
@@ -105,7 +62,9 @@ fun HomeScreen(
             Column {
                 Button(
                     onClick = onNavigateToCalendar,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
                 ) { Text("다음 화면 (캘린더) 보기") }
                 AppBottomNavigation()
@@ -114,16 +73,23 @@ fun HomeScreen(
         containerColor = Color.White
     ) { paddingValues ->
         Column(
-            modifier = Modifier.padding(paddingValues).padding(horizontal = 20.dp).verticalScroll(rememberScrollState())
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             // D-day 섹션 (기존 유지)
-            RoundedGrayBox(modifier = Modifier.fillMaxWidth().height(80.dp)) {
+            RoundedGrayBox(modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Box(modifier = Modifier.size(50.dp).background(Color(0xFFD6D6D6), CircleShape))
+                    Box(modifier = Modifier
+                        .size(50.dp)
+                        .background(Color(0xFFD6D6D6), CircleShape))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(nickname.ifEmpty { "유저" }, fontSize = 14.sp)
                         Spacer(modifier = Modifier.width(16.dp))
@@ -131,7 +97,9 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text("상대방", fontSize = 14.sp)
                     }
-                    Box(modifier = Modifier.size(50.dp).background(Color(0xFFD6D6D6), CircleShape))
+                    Box(modifier = Modifier
+                        .size(50.dp)
+                        .background(Color(0xFFD6D6D6), CircleShape))
                 }
             }
 
@@ -165,7 +133,9 @@ fun CalendarHomeScreen(
             Column {
                 Button(
                     onClick = onNavigateToDayUs,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
                 ) { Text("다음 화면 (DAYUS) 보기") }
                 AppBottomNavigation()
@@ -180,8 +150,12 @@ fun CalendarHomeScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // 상단 D-Day 카드
-            RoundedGrayBox(modifier = Modifier.fillMaxWidth().height(160.dp), color = Color(0xFFF2F2F2)) {
-                Column(modifier = Modifier.padding(20.dp).fillMaxSize()) {
+            RoundedGrayBox(modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp), color = Color(0xFFF2F2F2)) {
+                Column(modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxSize()) {
                     Text("${nickname}님과 함께한지", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Text("300일", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 }
@@ -218,81 +192,232 @@ fun CalendarHomeScreen(
     }
 }
 
-// ==========================================
-// NicknameScreen
-// ==========================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NicknameScreen(
+fun StepInputScreen(
     viewModel: MainViewModel,
-    onNextClick: () -> Unit
+    onAllFinish: () -> Unit
 ) {
-    Scaffold(containerColor = Color.White) { paddingValues ->
+    var currentStep by remember { mutableStateOf(1) }
+    var showSheet by remember { mutableStateOf(false) } // 바텀시트 노출 상태
+    val sheetState = rememberModalBottomSheetState()
+    val context = LocalContext.current
+
+
+    // 1. 임시 파일 Uri 생성 (카메라용)
+    val tempImageUri = remember {
+        val file = File.createTempFile("profile_", ".jpg", context.externalCacheDir)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }
+
+    // 2. 카메라 촬영 런처
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) viewModel.updateProfileImage(tempImageUri)
+        showSheet = false // 작업 완료 후 시트 닫기
+    }
+
+    // 3. 갤러리 선택 런처
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        viewModel.updateProfileImage(uri)
+        showSheet = false
+    }
+    // 유효성 검사 (4단계는 선택사항이므로 true)
+    val currentValid = when(currentStep) {
+        1 -> viewModel.nickname.isNotEmpty()
+        2 -> isValidDate(viewModel.birthDate)
+        3 -> isValidDate(viewModel.anniversaryDate)
+        else -> true
+    }
+
+    Scaffold(containerColor = Color.White,
+        topBar = {
+            // 2단계부터만 뒤로가기 버튼 노출
+            if (currentStep > 1) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, top = 16.dp)
+                ) {
+                    IconButton(
+                        onClick = { currentStep -= 1 },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "뒤로가기",
+                            tint = Color.Black
+                        )
+                    }
+                }
+            }
+        }) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(100.dp))
-            Text(
-                text = "닉네임을 입력해 주세요",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "상대방에게 주로 불리는 애칭을 입력해도 좋아요",
-                fontSize = 14.sp,
-                color = Color.Gray,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(60.dp))
 
-            // 입력 필드
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // 타이틀 영역
+            Text(
+                text = when(currentStep) {
+                    1 -> "닉네임을 입력해 주세요"
+                    2 -> "생일을 입력해 주세요"
+                    3 -> "첫 만남을 입력해 주세요"
+                    else -> "프로필 사진을 등록해 주세요"
+                },
+                fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = when(currentStep) {
+                    1 -> "상대방에게 주로 불리는 애칭을 입력해도 좋아요"
+                    2 -> "서로의 생일을 잊지 않고 챙겨줄 수 있어요"
+                    3 -> "서로의 기념일을 잊지 않고 챙겨줄 수 있어요"
+                    else -> "상대방에게 보여지는 사진이에요\n지금은 건너뛸 수 있어요"
+                },
+                fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(60.dp))
+
+            // 중앙 입력 영역 (1~3단계 vs 4단계 분기)
+            if (currentStep <= 3) {
+                // 1~3단계: 입력 필드
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextField(
+                        value = when(currentStep) {
+                            1 -> viewModel.nickname
+                            2 -> viewModel.birthDate
+                            else -> viewModel.anniversaryDate
+                        },
+                        onValueChange = { input ->
+                            if (currentStep == 1) {
+                                viewModel.updateNickname(input)
+                            } else {
+                                val digits = input.filter { it.isDigit() }
+                                if (digits.length <= 8) {
+                                    if (currentStep == 2) viewModel.updateBirthDate(digits)
+                                    else viewModel.updateAnniversaryDate(digits)
+                                }
+                            }
+                        },
+                        // 1. 입력되는 텍스트 스타일 (검정색, 중앙 정렬)
+                        textStyle = LocalTextStyle.current.copy(
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center
+                        ),
+                        placeholder = {
+                            // 2. 플레이스홀더 스타일 (C7C7C7, 중앙 정렬)
+                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if(currentStep == 1) "닉네임" else "0000년 00월 00일",
+                                    color = Color(0xFFC7C7C7),
+                                    fontSize = 18.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        },
+                        visualTransformation = if (currentStep == 1) {
+                            VisualTransformation.None
+                        } else {
+                            DateMaskTransformation()
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (currentStep == 1) KeyboardType.Text else KeyboardType.Number
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            cursorColor = Color.Black,
+                            focusedIndicatorColor = Color.Black, // 밑줄 색상
+                            unfocusedIndicatorColor = Color(0xFFEEEEEE) // 미선택 시 밑줄 색상
+                        ),
+                        singleLine = true
+                    )
+                }
+            } else {
+                // 4단계: 프로필 이미지 등록
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .background(Color(0xFFFF5252), CircleShape),
+                        .size(150.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE0E0E0))
+                        .clickable { showSheet = true }, // 클릭 시 메뉴 오픈!
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("1", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    if (viewModel.profileImageUri != null) {
+                        AsyncImage(
+                            model = viewModel.profileImageUri,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(40.dp))
+                    }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // 실제 입력 가능한 TextField로 변경
-                TextField(
-                    value = viewModel.nickname,
-                    onValueChange = { viewModel.updateNickname(it) },
-                    placeholder = { Text("닉네임 입력") },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Black,
-                        unfocusedIndicatorColor = Color.LightGray
-                    ),
-                    modifier = Modifier.weight(1f)
-                )
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // 다음 버튼
+            // 하단 버튼
             Button(
-                onClick = onNextClick,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                onClick = {
+                    if (currentStep < 4) currentStep++ else onAllFinish()
+                },
+                enabled = currentValid,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
                 shape = RoundedCornerShape(28.dp),
-                // 닉네임 입력 여부에 따라 색상 변경
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if(viewModel.nickname.isNotEmpty()) Color.Black else Color(0xFFC4C4C4)
+                    containerColor = if(currentValid) Color.Black else Color(0xFFE0E0E0)
                 )
             ) {
-                Text("다음 (홈으로)", fontSize = 18.sp, color = Color.White)
+                Text(if(currentStep == 4) "시작하기" else "다음", fontSize = 18.sp, color = Color.White)
             }
             Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        if (showSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showSheet = false },
+                sheetState = sheetState,
+                containerColor = Color.White
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 40.dp, start = 20.dp, end = 20.dp)
+                ) {
+                    Text("프로필 사진 설정", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+
+                    // 카메라 선택지
+                    ListItem(
+                        headlineContent = { Text("사진 촬영") },
+                        leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) }, // 카메라 아이콘으로 변경 가능
+                        modifier = Modifier.clickable { cameraLauncher.launch(tempImageUri) }
+                    )
+
+                    // 갤러리 선택지
+                    ListItem(
+                        headlineContent = { Text("앨범에서 가져오기") },
+                        leadingContent = { Icon(Icons.Default.DateRange, contentDescription = null) }, // 앨범 아이콘으로 변경 가능
+                        modifier = Modifier.clickable { galleryLauncher.launch("image/*") }
+                    )
+                }
+            }
         }
     }
 }
@@ -310,7 +435,9 @@ fun HomeScreen(
             Column {
                 Button(
                     onClick = onNavigateToCalendar,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
                 ) {
                     Text("다음 화면 (캘린더) 보기")
@@ -321,16 +448,23 @@ fun HomeScreen(
         containerColor = Color.White
     ) { paddingValues ->
         Column(
-            modifier = Modifier.padding(paddingValues).padding(horizontal = 20.dp).verticalScroll(rememberScrollState())
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             // D-day 카드
-            RoundedGrayBox(modifier = Modifier.fillMaxWidth().height(80.dp)) {
+            RoundedGrayBox(modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Box(modifier = Modifier.size(50.dp).background(Color(0xFFD6D6D6), CircleShape))
+                    Box(modifier = Modifier
+                        .size(50.dp)
+                        .background(Color(0xFFD6D6D6), CircleShape))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(nickname.ifEmpty { "유저" }, fontSize = 14.sp) // 닉네임 표시
                         Spacer(modifier = Modifier.width(16.dp))
@@ -338,13 +472,17 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text("상대방", fontSize = 14.sp)
                     }
-                    Box(modifier = Modifier.size(50.dp).background(Color(0xFFD6D6D6), CircleShape))
+                    Box(modifier = Modifier
+                        .size(50.dp)
+                        .background(Color(0xFFD6D6D6), CircleShape))
                 }
             }
             Spacer(modifier = Modifier.height(30.dp))
             Text("오늘 일정", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(12.dp))
-            RoundedGrayBox(modifier = Modifier.fillMaxWidth().height(100.dp))
+            RoundedGrayBox(modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp))
             Spacer(modifier = Modifier.height(30.dp))
             MemoryGridSection()
         }
@@ -363,7 +501,9 @@ fun CalendarHomeScreen(
             Column {
                 Button(
                     onClick = onNavigateToDayUs,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
                 ) {
                     Text("다음 화면 (DAYUS) 보기")
@@ -374,10 +514,17 @@ fun CalendarHomeScreen(
         containerColor = Color.White
     ) { paddingValues ->
         Column(
-            modifier = Modifier.padding(paddingValues).padding(horizontal = 20.dp).verticalScroll(rememberScrollState())
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            RoundedGrayBox(modifier = Modifier.fillMaxWidth().height(160.dp), color = Color(0xFFF2F2F2)) {
-                Column(modifier = Modifier.padding(20.dp).fillMaxSize()) {
+            RoundedGrayBox(modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp), color = Color(0xFFF2F2F2)) {
+                Column(modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxSize()) {
                     Text("${nickname}님과 함께한지", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Text("300일", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 }
@@ -423,7 +570,9 @@ fun DayUsScreen() {
                         containerColor = Color(0xFF1C1C1E), // 검은색에 가까운 다크그레이
                         contentColor = Color.White,
                         shape = CircleShape,
-                        modifier = Modifier.size(64.dp).offset(y = (-10).dp) // 살짝 위로 올림
+                        modifier = Modifier
+                            .size(64.dp)
+                            .offset(y = (-10).dp) // 살짝 위로 올림
                     ) {
                         Icon(Icons.Default.Add, contentDescription = "Add", modifier = Modifier.size(32.dp))
                     }
@@ -550,7 +699,9 @@ fun ScheduleListSection(schedules: List<ScheduleItem>) {
 
         if (schedules.isEmpty()) {
             // 일정이 없을 때 빈 박스
-            RoundedGrayBox(modifier = Modifier.fillMaxWidth().height(100.dp))
+            RoundedGrayBox(modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp))
         } else {
             // 일정이 있을 때 리스트 출력
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -563,7 +714,9 @@ fun ScheduleListSection(schedules: List<ScheduleItem>) {
                         color = Color(0xFFF9F9F9)
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -589,28 +742,38 @@ fun MemoryGridSection(memories: List<MemoryItem>) {
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth().height(260.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(260.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 첫 번째 사진 (왼쪽 큰 거)
             val firstImg = memories.getOrNull(0)?.imageResId
             PhotoBox(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
                 imageResId = firstImg
             )
 
             // 오른쪽 컬럼
             Column(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 두 번째 사진 (우측 상단)
                 val secondImg = memories.getOrNull(1)?.imageResId
-                PhotoBox(modifier = Modifier.weight(1f).fillMaxWidth(), imageResId = secondImg)
+                PhotoBox(modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(), imageResId = secondImg)
 
                 // 세 번째 사진 (우측 하단)
                 val thirdImg = memories.getOrNull(2)?.imageResId
-                PhotoBox(modifier = Modifier.weight(1f).fillMaxWidth(), imageResId = thirdImg)
+                PhotoBox(modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(), imageResId = thirdImg)
             }
         }
     }
@@ -713,14 +876,18 @@ fun WeeklyCalendar(
 // ==========================================
 @Composable
 fun TopTitleBar(title: String) {
-    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
         Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
     }
 }
 
 @Composable
 fun RoundedGrayBox(modifier: Modifier = Modifier, color: Color = Color(0xFFF2F2F2), content: @Composable BoxScope.() -> Unit = {}) {
-    Box(modifier = modifier.clip(RoundedCornerShape(16.dp)).background(color), content = content)
+    Box(modifier = modifier
+        .clip(RoundedCornerShape(16.dp))
+        .background(color), content = content)
 }
 
 @Composable
@@ -735,12 +902,34 @@ fun AppBottomNavigation() {
 @Composable
 fun MemoryGridSection() {
     Text("오늘 추억", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-    Row(modifier = Modifier.fillMaxWidth().height(200.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        RoundedGrayBox(modifier = Modifier.weight(1f).fillMaxHeight())
-        Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            RoundedGrayBox(modifier = Modifier.weight(1f).fillMaxWidth())
-            RoundedGrayBox(modifier = Modifier.weight(1f).fillMaxWidth())
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .height(200.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RoundedGrayBox(modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight())
+        Column(modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RoundedGrayBox(modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth())
+            RoundedGrayBox(modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth())
         }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+fun isValidDate(dateString: String): Boolean {
+    if (dateString.length != 8) return false
+    return try {
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd")
+        java.time.LocalDate.parse(dateString, formatter)
+        true
+    } catch (e: Exception) {
+        false
     }
 }
 
