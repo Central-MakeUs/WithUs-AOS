@@ -94,4 +94,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation(libs.timber)
+
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
 }

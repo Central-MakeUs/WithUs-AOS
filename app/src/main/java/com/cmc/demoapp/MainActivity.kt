@@ -7,8 +7,12 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import com.cmc.demoapp.fragment.ComposeFragment
 import com.koiware.demoapp.R
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 

@@ -22,21 +22,28 @@
             android:name="com.cmc.demoapp.MainActivity"
             android:screenOrientation="portrait"
             android:exported="true"
-            android:theme="@style/Theme.KOIDemoApp.TransparentStatusBar"
+            android:theme="@style/Theme.KOIDemoApp"
             tools:ignore="LockedOrientationActivity">
+
+        </activity>
+
+
+        <activity
+            android:name="com.cmc.demoapp.SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.App.Starting">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
 
         </activity>
 
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
+
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
