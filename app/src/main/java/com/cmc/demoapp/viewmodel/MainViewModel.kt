@@ -14,6 +14,9 @@ class MainViewModel : ViewModel() {
     // 1단계: 닉네임
     var nickname by mutableStateOf("")
         private set
+
+    var partnerNickname by mutableStateOf("단아는 감자")
+        private set
     fun updateNickname(input: String) { nickname = input }
 
     // 2단계: 생일

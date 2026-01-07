@@ -1,6 +1,8 @@
 package com.cmc.demoapp.screen
 
 import CalendarHomeScreen
+import ConnectCompleteScreen
+import ConnectConfirmScreen
 import ConnectMainScreen
 import DayUsScreen
 import EnterCodeScreen
@@ -66,7 +68,7 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
     val schedules = viewModel.dummySchedules
     val memories = viewModel.dummyMemories
 
-    NavHost(navController = navController, startDestination = "step_input") {
+    NavHost(navController = navController, startDestination = "onboarding") {
         composable("onboarding") {
             OnboardingScreen(
                 viewModel = viewModel,
@@ -96,9 +98,25 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
                 },
                 onEnterCodeClick = {
                     navController.navigate("enter_code")
+                }
+            )
+        }
+
+        composable("connect_confirm") {
+            ConnectConfirmScreen(viewModel = viewModel,
+                onConfirmClick = {
+                    navController.navigate("connect_complete")
                 },
                 onLaterClick = {},
-                )
+            )
+        }
+
+        composable("connect_complete") {
+            ConnectCompleteScreen(viewModel = viewModel,
+                onStartClick = {
+
+                },
+            )
         }
 
         composable("invite") {
@@ -111,7 +129,7 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
             EnterCodeScreen(
                 onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("connect") },
                 onConnect = {
-
+                    navController.navigate("connect_confirm")
                 }
             )
         }

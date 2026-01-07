@@ -69,6 +69,7 @@ dependencies {
 
     implementation(libs.androidx.material3.android)
     implementation(libs.fragment.ktx)
+    implementation(libs.androidx.ui)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

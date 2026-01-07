@@ -1,3 +1,6 @@
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -7,15 +10,20 @@ import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -33,10 +41,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
@@ -57,6 +70,7 @@ import kotlinx.coroutines.delay
 import java.io.File
 import java.util.Calendar
 import kotlin.collections.getOrNull
+import com.koiware.demoapp.R
 
 @Composable
 fun HomeScreen(
@@ -207,54 +221,49 @@ fun StepInputScreen(
     viewModel: MainViewModel,
     onAllFinish: () -> Unit
 ) {
+    // 이제 단계는 1(닉네임)과 4(프로필)만 사용합니다.
     var currentStep by remember { mutableStateOf(1) }
-    var showSheet by remember { mutableStateOf(false) } // 바텀시트 노출 상태
+    var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
 
-
-    // 1. 임시 파일 Uri 생성 (카메라용)
+    // 카메라/갤러리 런처 로직 (기존과 동일)
     val tempImageUri = remember {
         val file = File.createTempFile("profile_", ".jpg", context.externalCacheDir)
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
-    // 2. 카메라 촬영 런처
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) viewModel.updateProfileImage(tempImageUri)
-        showSheet = false // 작업 완료 후 시트 닫기
+        showSheet = false
     }
 
-    // 3. 갤러리 선택 런처
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         viewModel.updateProfileImage(uri)
         showSheet = false
     }
-    // 유효성 검사 (4단계는 선택사항이므로 true)
+
+    // 유효성 검사: 1단계는 닉네임 필수, 4단계는 건너뛰기 가능하므로 항상 true
     val currentValid = when(currentStep) {
-        1 -> viewModel.nickname.isNotEmpty()
-        2 -> isValidDate(viewModel.birthDate)
-        3 -> isValidDate(viewModel.anniversaryDate)
+        1 -> viewModel.nickname.isNotBlank()
         else -> true
     }
 
-    Scaffold(containerColor = Color.White,
+    Scaffold(
+        containerColor = Color.White,
         topBar = {
-            // 2단계부터만 뒤로가기 버튼 노출
-            if (currentStep > 1) {
+            // 4단계(프로필)일 때만 뒤로가기 버튼 표시
+            if (currentStep == 4) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, top = 16.dp)
+                        .padding(start = 8.dp, top = 8.dp)
                 ) {
-                    IconButton(
-                        onClick = { currentStep -= 1 },
-                        modifier = Modifier.size(24.dp)
-                    ) {
+                    IconButton(onClick = { currentStep = 1 }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "뒤로가기",
@@ -263,7 +272,8 @@ fun StepInputScreen(
                     }
                 }
             }
-        }) { paddingValues ->
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -273,132 +283,172 @@ fun StepInputScreen(
         ) {
             Spacer(modifier = Modifier.height(60.dp))
 
-            // 타이틀 영역
+            // 타이틀 및 설명 영역
             Text(
-                text = when(currentStep) {
-                    1 -> "닉네임을 입력해 주세요"
-                    2 -> "생일을 입력해 주세요"
-                    3 -> "첫 만남을 입력해 주세요"
-                    else -> "프로필 사진을 등록해 주세요"
-                },
-                fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+                text = if (currentStep == 1) "위더스에서 활동할 닉네임은?" else "프로필 사진을 등록해 주세요",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = when(currentStep) {
-                    1 -> "상대방에게 주로 불리는 애칭을 입력해도 좋아요"
-                    2 -> "서로의 생일을 잊지 않고 챙겨줄 수 있어요"
-                    3 -> "서로의 기념일을 잊지 않고 챙겨줄 수 있어요"
-                    else -> "상대방에게 보여지는 사진이에요\n지금은 건너뛸 수 있어요"
-                },
-                fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Center
+                text = if (currentStep == 1)
+                    "상대방에게 주로 불리는 애칭을 입력해도 좋아요"
+                else "사진을 등록하지 않으면 기본 프로필이 보여집니다.",
+                fontSize = 16.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(60.dp))
 
-            // 중앙 입력 영역 (1~3단계 vs 4단계 분기)
-            if (currentStep <= 3) {
-                // 1~3단계: 입력 필드
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextField(
-                        value = when(currentStep) {
-                            1 -> viewModel.nickname
-                            2 -> viewModel.birthDate
-                            else -> viewModel.anniversaryDate
-                        },
-                        onValueChange = { input ->
-                            if (currentStep == 1) {
-                                viewModel.updateNickname(input)
-                            } else {
-                                val digits = input.filter { it.isDigit() }
-                                if (digits.length <= 8) {
-                                    if (currentStep == 2) viewModel.updateBirthDate(digits)
-                                    else viewModel.updateAnniversaryDate(digits)
-                                }
-                            }
-                        },
-                        // 1. 입력되는 텍스트 스타일 (검정색, 중앙 정렬)
-                        textStyle = LocalTextStyle.current.copy(
-                            fontSize = 18.sp,
-                            textAlign = TextAlign.Center
-                        ),
-                        placeholder = {
-                            // 2. 플레이스홀더 스타일 (C7C7C7, 중앙 정렬)
-                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = if(currentStep == 1) "닉네임" else "0000년 00월 00일",
-                                    color = Color(0xFFC7C7C7),
-                                    fontSize = 18.sp,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        },
-                        visualTransformation = if (currentStep == 1) {
-                            VisualTransformation.None
-                        } else {
-                            DateMaskTransformation()
-                        },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = if (currentStep == 1) KeyboardType.Text else KeyboardType.Number
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            cursorColor = Color.Black,
-                            focusedIndicatorColor = Color.Black, // 밑줄 색상
-                            unfocusedIndicatorColor = Color(0xFFEEEEEE) // 미선택 시 밑줄 색상
-                        ),
-                        singleLine = true
+            // 입력 영역
+            if (currentStep == 1) {
+                // 1단계: 닉네임 입력 (중앙 정렬)
+                OutlinedTextField(
+                    value = viewModel.nickname,
+                    onValueChange = { if (it.length <= 8) viewModel.updateNickname(it) },
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Center,
+                        color = Color.Black
+                    ),
+                    placeholder = {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("닉네임을 입력해주세요.", color = Color(0xFFC7C7C7), fontSize = 18.sp)
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(8.dp), // 네모 박스의 둥글기 조절
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,   // 포커스 되었을 때 테두리 색
+                        unfocusedBorderColor =  Color(0xFFF0F0F0), // 기본 테두리 색
+                        cursorColor = Color.Black,
+                        focusedContainerColor =  Color(0xFFF0F0F0),
+                        unfocusedContainerColor = Color(0xFFF0F0F0)
                     )
+                )
+
+                // 에러 메시지 표시 로직
+                val isNicknameError = viewModel.nickname.isNotEmpty() && (viewModel.nickname.length < 2 || viewModel.nickname.length > 8)
+
+                // 메시지 영역의 높이를 고정(height)하면 메시지가 나타날 때 UI가 덜컹거리는 것을 방지할 수 있습니다.
+                Box(modifier = Modifier.height(30.dp).padding(top = 8.dp)) {
+                    if (isNicknameError) {
+                        Text(
+                            text = "2~8자 이내로 입력해주세요.",
+                            color = Color(0xFFF5A7B8),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             } else {
                 // 4단계: 프로필 이미지 등록
                 Box(
                     modifier = Modifier
-                        .size(150.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFE0E0E0))
-                        .clickable { showSheet = true }, // 클릭 시 메뉴 오픈!
+                        .size(160.dp) // 버튼 공간까지 고려하여 전체 크기 설정
+                        .clickable(
+                        ) {
+                            if (viewModel.profileImageUri == null) {
+                                showSheet = true
+                            }
+                          },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (viewModel.profileImageUri != null) {
-                        AsyncImage(
-                            model = viewModel.profileImageUri,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(40.dp))
+                    // 4단계: 프로필 이미지 등록
+                    Box(
+                        modifier = Modifier
+                            .size(160.dp), // 전체 영역 (이미지 150dp + 버튼이 삐져나올 공간)
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // 1. 메인 프로필 원형 박스 (테두리 검정, 안쪽 회색)
+                        Box(
+                            modifier = Modifier
+                                .size(150.dp)
+                                .border(
+                                    width = 2.dp,
+                                    color = Color.Black, // 테두리는 검은색
+                                    shape = CircleShape
+                                )
+                                .background(Color(0xFFD9D9D9), CircleShape) // 안쪽은 회색 배경
+                                .clip(CircleShape)
+                                .clickable {
+                                    if (viewModel.profileImageUri == null) showSheet = true
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (viewModel.profileImageUri != null) {
+                                // 이미지가 있을 때: 사진 표시
+                                AsyncImage(
+                                    model = viewModel.profileImageUri,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                // 이미지가 없을 때: 격자 아이콘 표시
+                                Icon(
+                                    painter = painterResource(id = R.drawable.photo_grid),
+                                    contentDescription = null,
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(100.dp) // 격자는 조금 더 크게 설정
+                                )
+                            }
+                        }
+
+                        // 2. 우측 하단 카메라 추가 버튼 (이미지가 없을 때만 표시)
+                        if (viewModel.profileImageUri == null) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd) // 가장 바깥 Box 기준 우측 하단
+                                    .padding(bottom = 10.dp, end = 10.dp) // 테두리 위에 걸치도록 위치 조정
+                                    .size(44.dp)
+                                    .shadow(4.dp, CircleShape)
+                                    .background(Color.White, CircleShape)
+                                    .clickable { showSheet = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.photo_add),
+                                    contentDescription = "사진 추가",
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
-
             Spacer(modifier = Modifier.weight(1f))
 
             // 하단 버튼
             Button(
                 onClick = {
-                    if (currentStep < 4) currentStep++ else onAllFinish()
+                    if (currentStep == 1) currentStep = 4 else onAllFinish()
                 },
                 enabled = currentValid,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if(currentValid) Color.Black else Color(0xFFE0E0E0)
                 )
             ) {
-                Text(if(currentStep == 4) "시작하기" else "다음", fontSize = 18.sp, color = Color.White)
+                Text(
+                    text = if(currentStep == 1) "다음" else "프로필 완성하기",
+                    fontSize = 18.sp,
+                    color = Color.White
+                )
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
 
+        // 바텀 시트 (기존과 동일)
         if (showSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showSheet = false },
@@ -411,18 +461,14 @@ fun StepInputScreen(
                         .padding(bottom = 40.dp, start = 20.dp, end = 20.dp)
                 ) {
                     Text("프로필 사진 설정", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
-
-                    // 카메라 선택지
                     ListItem(
                         headlineContent = { Text("사진 촬영") },
-                        leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) }, // 카메라 아이콘으로 변경 가능
+                        leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
                         modifier = Modifier.clickable { cameraLauncher.launch(tempImageUri) }
                     )
-
-                    // 갤러리 선택지
                     ListItem(
                         headlineContent = { Text("앨범에서 가져오기") },
-                        leadingContent = { Icon(Icons.Default.DateRange, contentDescription = null) }, // 앨범 아이콘으로 변경 가능
+                        leadingContent = { Icon(Icons.Default.DateRange, contentDescription = null) },
                         modifier = Modifier.clickable { galleryLauncher.launch("image/*") }
                     )
                 }
@@ -935,14 +981,13 @@ fun ConnectMainScreen(
     viewModel: MainViewModel,
     onInviteClick: () -> Unit,
     onEnterCodeClick: () -> Unit,
-    onLaterClick: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("${viewModel.nickname}님, 환영해요!", fontSize = 18.sp)
+        Text("${viewModel.nickname}님, 가입을 축하드려요!", fontSize = 18.sp)
         Text("상대방을 연결하고\n둘만의 추억을 쌓아가요",
             fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
 
@@ -950,9 +995,8 @@ fun ConnectMainScreen(
 
         Box(
             modifier = Modifier
-                .size(200.dp)
-                .clip(CircleShape) // 원형으로 잘라줌
-                .background(Color(0xFFF2F2F2)),
+                .size(width = 300.dp, height = 200.dp)
+                .background(Color(0xFFE6E6E6)),
             contentAlignment = Alignment.Center
         ) {
             if (viewModel.profileImageUri != null) {
@@ -969,27 +1013,94 @@ fun ConnectMainScreen(
 
         Spacer(modifier = Modifier.height(60.dp))
 
-        // 초대하기 버튼
+// 1. 상대방 코드 입력하기 버튼 (흰색 배경 + 검은색 테두리/텍스트)
         Button(
-            onClick = onInviteClick,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-            shape = RoundedCornerShape(16.dp)
+            onClick = onEnterCodeClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .border(1.dp, Color.Black, RoundedCornerShape(8.dp)), // 검은색 테두리 추가
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White // 배경 흰색
+            ),
+            shape = RoundedCornerShape(8.dp)
         ) {
-            Text("상대방을 초대할게요", color = Color.White)
+            Text("상대방 코드 입력하기", color = Color.Black) // 텍스트 검은색
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 코드 입력 버튼
+// 2. 내 코드로 초대하기 버튼 (검은색 배경 + 흰색 텍스트)
         Button(
-            onClick = onEnterCodeClick,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC7C7C7)),
-            shape = RoundedCornerShape(16.dp)
+            onClick = onInviteClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Black // 배경 검은색
+            ),
+            shape = RoundedCornerShape(8.dp)
         ) {
-            Text("상대방의 코드를 받았어요", color = Color.White)
+            Text("내 코드로 초대하기", color = Color.White) // 텍스트 흰색
         }
+
+//        TextButton(onClick = onLaterClick) {
+//            Text("다음에 할래요", color = Color.Gray, textDecoration = TextDecoration.Underline)
+//        }
+    }
+}
+
+@Composable
+fun ConnectConfirmScreen(
+    viewModel: MainViewModel,
+    onConfirmClick: () -> Unit,
+    onLaterClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("${viewModel.nickname}님이\n ${viewModel.partnerNickname} 님을 초대했어요!",
+            fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text("초대를 수락하면, 두 사람의 기록이 이어져요", fontSize = 18.sp)
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Box(
+            modifier = Modifier
+                .size(width = 300.dp, height = 200.dp)
+                .background(Color(0xFFE6E6E6)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (viewModel.profileImageUri != null) {
+                AsyncImage(
+                    model = viewModel.profileImageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.LightGray)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(60.dp))
+
+        Button(
+            onClick = onConfirmClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Black // 배경 검은색
+            ),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("초대 수락하기", color = Color.White) // 텍스트 흰색
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(onClick = onLaterClick) {
             Text("다음에 할래요", color = Color.Gray, textDecoration = TextDecoration.Underline)
@@ -998,11 +1109,83 @@ fun ConnectMainScreen(
 }
 
 @Composable
+fun ConnectCompleteScreen(
+    viewModel: MainViewModel,
+    onStartClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("커플 연결 완료!",
+            fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text("둘만의 사진 기록을 시작해 보세요", fontSize = 18.sp)
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Box(
+            modifier = Modifier
+                .size(width = 300.dp, height = 121.dp)
+                .background(Color(0xFFE6E6E6)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (viewModel.profileImageUri != null) {
+                AsyncImage(
+                    model = viewModel.profileImageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.LightGray)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(26.dp))
+
+        Box(
+            modifier = Modifier
+                .size(width = 300.dp, height = 121.dp)
+                .background(Color(0xFFE6E6E6)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (viewModel.profileImageUri != null) {
+                AsyncImage(
+                    model = viewModel.profileImageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.LightGray)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(60.dp))
+
+        Button(
+            onClick = onStartClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Black // 배경 검은색
+            ),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("시작하기", color = Color.White) // 텍스트 흰색
+        }
+    }
+}
+
+@Composable
 fun InviteScreen(onBack: () -> Unit) {
     var showCopyPopup by remember { mutableStateOf(false) }
-    val myCode = "03115753" // 예시 코드
+    val myCode = "99744211" // 서버에서 받아온 내 초대 코드 예시
+    val context = LocalContext.current
 
-    // 팝업 자동 사라짐 로직
+    // 복사 완료 팝업 자동 사라짐 로직
     LaunchedEffect(showCopyPopup) {
         if (showCopyPopup) {
             delay(2000)
@@ -1010,114 +1193,272 @@ fun InviteScreen(onBack: () -> Unit) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+    Scaffold(
+        containerColor = Color.White,
+        topBar = {
+            IconButton(onClick = onBack, modifier = Modifier.padding(16.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
             }
-
-            Spacer(modifier = Modifier.height(40.dp))
-            Text("상대방에게 코드를\n공유해서 초대해 보세요",
-                fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-
-            Spacer(modifier = Modifier.height(60.dp))
-            Text(myCode, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 8.sp)
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Button(
-                onClick = { showCopyPopup = true }, // 여기서만 팝업 표시
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                shape = RoundedCornerShape(16.dp)
-            ) { Text("코드 복사하기") }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Button(
-                onClick = { /* 공유 로직 */ },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                shape = RoundedCornerShape(16.dp)
-            ) { Text("코드 공유하기") }
         }
-
-        // 복사 완료 팝업 (상단 중앙)
-        AnimatedVisibility(
-            visible = showCopyPopup,
-            enter = fadeIn() + slideInVertically(),
-            exit = fadeOut() + slideOutVertically(),
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 100.dp)
-        ) {
-            Surface(
-                color = Color.Black,
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.padding(horizontal = 16.dp)
+    ) { paddingValues ->
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("복사를 완료했어요", color = Color.White, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(40.dp))
+                Text(
+                    text = "상대방에게 코드를\n공유해서 초대해 보세요",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(60.dp))
+
+                // 1. 내 코드를 밑줄 UI 위에 표시
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    myCode.forEach { char ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = char.toString(),
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            // 모든 숫자가 이미 존재하므로 검정색 밑줄 표시
+                            Box(
+                                modifier = Modifier
+                                    .width(24.dp)
+                                    .height(2.dp)
+                                    .background(Color.Black)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // 2. 코드 복사 버튼 (흰색 배경 + 검정 테두리)
+                Button(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Invite Code", myCode)
+                        clipboard.setPrimaryClip(clip)
+                        showCopyPopup = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .border(1.dp, Color.Black, RoundedCornerShape(8.dp)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_copy), // 복사 아이콘
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("코드 복사", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 3. 링크 공유 버튼 (검정 배경)
+                Button(
+                    onClick = { /* 공유 로직 */ },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_share), // 공유 아이콘
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("링크 공유", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // 4. 복사 완료 토스트 팝업 (중앙 위치)
+            AnimatedVisibility(
+                visible = showCopyPopup,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Surface(
+                    color = Color.White.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 8.dp
+                ) {
+                    Text(
+                        "코드가 성공적으로 복사되었어요!",
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        fontSize = 14.sp,
+                        color = Color.Black
+                    )
                 }
             }
         }
     }
 }
-
 @Composable
 fun EnterCodeScreen(onBack: () -> Unit, onConnect: (String) -> Unit) {
     var codeInput by remember { mutableStateOf("") }
     val isComplete = codeInput.length == 8
+    val focusRequester = remember { FocusRequester() }
+    var isError by remember { mutableStateOf(true) } // 에러 상태 추가
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // 뒤로가기 버튼
-        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+    // 키보드가 올라올 때 버튼이 밀려 올라오도록 Scaffold 사용
+    Scaffold(
+        containerColor = Color.White,
+        topBar = {
+            IconButton(onClick = onBack, modifier = Modifier.padding(16.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+            }
+        },
+        bottomBar = {
+            // 하단 버튼 영역: IME(키보드)에 반응하여 자동으로 위치 조절
+            Box(modifier = Modifier
+                .navigationBarsPadding() // 네비게이션 바 대응
+                .imePadding() // 키보드가 올라오면 그만큼 패딩 추가
+                .padding(24.dp)
+            ) {
+                Button(
+                    onClick = { onConnect(codeInput) },
+                    enabled = isComplete,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isComplete) Color.Black else Color(0xFFE0E0E0)
+                    ),
+                    shape = RoundedCornerShape(28.dp)
+                ) {
+                    Text("연결하기", color = Color.White, fontSize = 18.sp)
+                }
+            }
         }
-
-        Spacer(modifier = Modifier.height(40.dp))
-        Text("상대방에게 받은 코드를\n입력해 주세요",
-            fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-
-        Spacer(modifier = Modifier.height(60.dp))
-
-        // 코드 입력 필드
-        TextField(
-            value = codeInput,
-            onValueChange = { if (it.length <= 8) codeInput = it.filter { char -> char.isDigit() } },
-            textStyle = LocalTextStyle.current.copy(
-                fontSize = 28.sp,
-                textAlign = TextAlign.Center,
-                letterSpacing = 4.sp // 숫자 간격 조절
-            ),
-            visualTransformation = CodeMaskTransformation(), // 아래 정의된 마스크 사용
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // 연결하기 버튼
-        Button(
-            onClick = { onConnect(codeInput) },
-            enabled = isComplete,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isComplete) Color.Black else Color(0xFFE0E0E0)
-            ),
-            shape = RoundedCornerShape(28.dp)
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("연결하기", color = Color.White, fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(40.dp))
+            Text(
+                "상대방에게 받은 코드를\n입력해 주세요",
+                fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(60.dp))
+
+            // 실제 입력을 받는 투명 TextField와 화면에 그려지는 밑줄 UI 조합
+            Box(contentAlignment = Alignment.Center) {
+                // 1. 각 숫자 아래 밑줄을 그리는 UI
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (i in 0 until 8) {
+                        val isEntered = i < codeInput.length
+                        val char = if (isEntered) codeInput[i].toString() else "0"
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = char,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isEntered) Color.Black else Color(0xFFC7C7C7)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            // 밑줄 UI: 입력되면 검은색, 아니면 회색
+                            Box(
+                                modifier = Modifier
+                                    .width(24.dp)
+                                    .height(2.dp)
+                                    .background(if (isEntered) Color.Black else Color(0xFFEEEEEE))
+                            )
+                        }
+                    }
+                }
+
+                // 2. 실제 입력을 처리하는 투명 TextField
+                BasicTextField(
+                    value = codeInput,
+                    onValueChange = {
+                        if (it.length <= 8) codeInput = it.filter { c -> c.isDigit() }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    // 텍스트 색상을 투명하게 설정하여 물리적으로 숨김
+                    textStyle = LocalTextStyle.current.copy(color = Color.Transparent),
+                    cursorBrush = SolidColor(Color.Transparent), // 커서 숨김
+                    decorationBox = { innerTextField ->
+                        // innerTextField()를 호출하지 않거나, 투명한 Box로 감싸서 텍스트 노출 차단
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            innerTextField()
+                        }
+                    }
+                )
+            }
+
+            if (isError) {
+                CodeErrorView()
+            }
         }
+    }
+
+    // 진입 시 키보드 자동 실행
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+}
+
+@Composable
+fun CodeErrorView() {
+    val errorColor = Color(0xFFFFB2BC) // 이미지와 유사한 핑크색
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 느낌표 아이콘 (!)
+        Icon(
+            painter = painterResource(id = R.drawable.code_warning),
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = errorColor
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        // 에러 텍스트
+        Text(
+            text = "초대코드를 다시 확인해주세요.",
+            color = errorColor,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
