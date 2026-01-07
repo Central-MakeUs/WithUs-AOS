@@ -4,6 +4,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -35,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -43,8 +50,10 @@ import com.cmc.demoapp.model.CalendarDay
 import com.cmc.demoapp.model.MemoryItem
 import com.cmc.demoapp.model.ScheduleItem
 import com.cmc.demoapp.screen.AppNavigation
+import com.cmc.demoapp.utils.CodeMaskTransformation
 import com.cmc.demoapp.utils.DateMaskTransformation
 import com.cmc.demoapp.viewmodel.MainViewModel
+import kotlinx.coroutines.delay
 import java.io.File
 import java.util.Calendar
 import kotlin.collections.getOrNull
@@ -917,6 +926,197 @@ fun MemoryGridSection() {
             RoundedGrayBox(modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+fun ConnectMainScreen(
+    viewModel: MainViewModel,
+    onInviteClick: () -> Unit,
+    onEnterCodeClick: () -> Unit,
+    onLaterClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("${viewModel.nickname}님, 환영해요!", fontSize = 18.sp)
+        Text("상대방을 연결하고\n둘만의 추억을 쌓아가요",
+            fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        Box(
+            modifier = Modifier
+                .size(200.dp)
+                .clip(CircleShape) // 원형으로 잘라줌
+                .background(Color(0xFFF2F2F2)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (viewModel.profileImageUri != null) {
+                AsyncImage(
+                    model = viewModel.profileImageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.LightGray)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(60.dp))
+
+        // 초대하기 버튼
+        Button(
+            onClick = onInviteClick,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("상대방을 초대할게요", color = Color.White)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 코드 입력 버튼
+        Button(
+            onClick = onEnterCodeClick,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC7C7C7)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("상대방의 코드를 받았어요", color = Color.White)
+        }
+
+        TextButton(onClick = onLaterClick) {
+            Text("다음에 할래요", color = Color.Gray, textDecoration = TextDecoration.Underline)
+        }
+    }
+}
+
+@Composable
+fun InviteScreen(onBack: () -> Unit) {
+    var showCopyPopup by remember { mutableStateOf(false) }
+    val myCode = "03115753" // 예시 코드
+
+    // 팝업 자동 사라짐 로직
+    LaunchedEffect(showCopyPopup) {
+        if (showCopyPopup) {
+            delay(2000)
+            showCopyPopup = false
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+            Text("상대방에게 코드를\n공유해서 초대해 보세요",
+                fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+
+            Spacer(modifier = Modifier.height(60.dp))
+            Text(myCode, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 8.sp)
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = { showCopyPopup = true }, // 여기서만 팝업 표시
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("코드 복사하기") }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = { /* 공유 로직 */ },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(16.dp)
+            ) { Text("코드 공유하기") }
+        }
+
+        // 복사 완료 팝업 (상단 중앙)
+        AnimatedVisibility(
+            visible = showCopyPopup,
+            enter = fadeIn() + slideInVertically(),
+            exit = fadeOut() + slideOutVertically(),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 100.dp)
+        ) {
+            Surface(
+                color = Color.Black,
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("복사를 완료했어요", color = Color.White, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EnterCodeScreen(onBack: () -> Unit, onConnect: (String) -> Unit) {
+    var codeInput by remember { mutableStateOf("") }
+    val isComplete = codeInput.length == 8
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 뒤로가기 버튼
+        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.Start)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+        Text("상대방에게 받은 코드를\n입력해 주세요",
+            fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+
+        Spacer(modifier = Modifier.height(60.dp))
+
+        // 코드 입력 필드
+        TextField(
+            value = codeInput,
+            onValueChange = { if (it.length <= 8) codeInput = it.filter { char -> char.isDigit() } },
+            textStyle = LocalTextStyle.current.copy(
+                fontSize = 28.sp,
+                textAlign = TextAlign.Center,
+                letterSpacing = 4.sp // 숫자 간격 조절
+            ),
+            visualTransformation = CodeMaskTransformation(), // 아래 정의된 마스크 사용
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // 연결하기 버튼
+        Button(
+            onClick = { onConnect(codeInput) },
+            enabled = isComplete,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isComplete) Color.Black else Color(0xFFE0E0E0)
+            ),
+            shape = RoundedCornerShape(28.dp)
+        ) {
+            Text("연결하기", color = Color.White, fontSize = 18.sp)
         }
     }
 }

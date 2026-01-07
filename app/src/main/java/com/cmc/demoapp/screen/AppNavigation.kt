@@ -1,8 +1,11 @@
 package com.cmc.demoapp.screen
 
 import CalendarHomeScreen
+import ConnectMainScreen
 import DayUsScreen
+import EnterCodeScreen
 import HomeScreen
+import InviteScreen
 import StepInputScreen
 import android.os.Build
 import androidx.annotation.DrawableRes
@@ -75,14 +78,41 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
         composable("step_input") {
             StepInputScreen(
                 viewModel = viewModel,
-                onAllFinish = { navController.navigate("profile_photo") }
+                onAllFinish = { navController.navigate("connect") }
             )
         }
 
-        composable("profile_photo") {
-            DayUsUploadScreen(
-                viewModel = viewModel,
-                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("home") }
+//        composable("profile_photo") {
+//            DayUsUploadScreen(
+//                viewModel = viewModel,
+//                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("connect") }
+//            )
+//        }
+
+        composable("connect") {
+            ConnectMainScreen(viewModel = viewModel,
+                onInviteClick = {
+                    navController.navigate("invite")
+                },
+                onEnterCodeClick = {
+                    navController.navigate("enter_code")
+                },
+                onLaterClick = {},
+                )
+        }
+
+        composable("invite") {
+            InviteScreen(
+                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("connect") }
+            )
+        }
+
+        composable("enter_code") {
+            EnterCodeScreen(
+                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("connect") },
+                onConnect = {
+
+                }
             )
         }
 
