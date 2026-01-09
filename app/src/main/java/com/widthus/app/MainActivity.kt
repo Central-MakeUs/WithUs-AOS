@@ -1,4 +1,4 @@
-package com.cmc.demoapp
+package com.widthus.app
 
 import android.os.Build
 import android.os.Bundle
@@ -7,8 +7,8 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
-import com.cmc.demoapp.fragment.ComposeFragment
-import com.koiware.demoapp.R
+import com.widthus.app.fragment.ComposeFragment
+import com.withus.app.R
 
 class MainActivity : AppCompatActivity() {
 

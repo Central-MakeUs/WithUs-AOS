@@ -1,4 +1,4 @@
-package com.cmc.demoapp.model
+package com.widthus.app.model
 
 data class OnboardingPage(
     val title: String,

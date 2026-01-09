@@ -1,21 +1,21 @@
-package com.cmc.demoapp.viewmodel
+package com.widthus.app.viewmodel
 
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.cmc.demoapp.model.MemoryItem
-import com.cmc.demoapp.model.ScheduleItem
-import com.cmc.demoapp.model.OnboardingPage
-import com.koiware.demoapp.R
+import com.widthus.app.model.MemoryItem
+import com.widthus.app.model.ScheduleItem
+import com.widthus.app.model.OnboardingPage
+import com.withus.app.R
 
 class MainViewModel : ViewModel() {
     // 1단계: 닉네임
     var nickname by mutableStateOf("")
         private set
 
-    var partnerNickname by mutableStateOf("단아는 감자")
+    var partnerNickname by mutableStateOf("감자")
         private set
     fun updateNickname(input: String) { nickname = input }
 
@@ -73,10 +73,9 @@ class MainViewModel : ViewModel() {
     )
 
     val onboardingPages = listOf(
-        OnboardingPage("주어진 질문에 사진 한 장으로\n둘만의 일상을 공유해요"),
-        OnboardingPage("쌓여가는 둘만의 사진 기록을\n한눈에 확인해요"),
-        OnboardingPage("원하는 사진으로\n둘만의 인생 네컷을 만들어봐요"),
-        OnboardingPage("사진으로 이어지는\n둘만의 일상, 지금 시작해요")
+        OnboardingPage("매일 발송되는 랜덤 질문", "주어진 질문에 사진 한 장으로\n서로의 마음을 확인해요"),
+        OnboardingPage("사진으로 일상을 함께", "쌓여가는 둘만의 사진 기록을\n한눈에 확인해요"),
+        OnboardingPage("우리 취향대로 커플네컷", "원하는 사진으로\n둘만의 인생 네컷을 만들어봐요"),
     )
 
     fun updateSelectedImage(uri: Uri?) {

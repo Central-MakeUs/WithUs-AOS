@@ -1,4 +1,4 @@
-package com.cmc.demoapp
+package com.widthus.app
 
 import org.junit.Test
 

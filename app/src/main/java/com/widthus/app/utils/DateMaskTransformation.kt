@@ -1,4 +1,4 @@
-package com.cmc.demoapp.utils
+package com.widthus.app.utils
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString

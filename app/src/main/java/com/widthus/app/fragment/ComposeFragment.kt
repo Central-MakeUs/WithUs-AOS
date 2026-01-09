@@ -1,4 +1,4 @@
-package com.cmc.demoapp.fragment
+package com.widthus.app.fragment
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -8,8 +8,7 @@ import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.compose.ui.platform.ComposeView // ComposeView 임포트
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.activityViewModels
-import com.cmc.demoapp.screen.AppNavigation
+import com.widthus.app.screen.AppNavigation
 
 class ComposeFragment : Fragment() {
 

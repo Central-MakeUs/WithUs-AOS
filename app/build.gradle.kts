@@ -20,12 +20,11 @@ android {
         }
     }
 
-
-    namespace = "com.koiware.demoapp"
+    namespace = "com.withus.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.kfcc.banking"
+        applicationId = "com.withus.app"
         minSdk = 23
         targetSdk = 35
         versionCode = 1

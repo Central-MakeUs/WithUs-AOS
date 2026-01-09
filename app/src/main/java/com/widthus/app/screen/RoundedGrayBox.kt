@@ -12,13 +12,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -30,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -52,25 +48,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
-import com.cmc.demoapp.model.CalendarDay
-import com.cmc.demoapp.model.MemoryItem
-import com.cmc.demoapp.model.ScheduleItem
-import com.cmc.demoapp.screen.AppNavigation
-import com.cmc.demoapp.utils.CodeMaskTransformation
-import com.cmc.demoapp.utils.DateMaskTransformation
-import com.cmc.demoapp.viewmodel.MainViewModel
+import com.widthus.app.model.CalendarDay
+import com.widthus.app.model.MemoryItem
+import com.widthus.app.model.ScheduleItem
+import com.widthus.app.screen.AppNavigation
+import com.widthus.app.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import java.io.File
 import java.util.Calendar
 import kotlin.collections.getOrNull
-import com.koiware.demoapp.R
+import com.withus.app.R
 
 @Composable
 fun HomeScreen(
@@ -976,23 +969,124 @@ fun MemoryGridSection() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class) // TopAppBar 사용을 위해 필요
 @Composable
-fun ConnectMainScreen(
+fun OnboardingConnectScreen(
     viewModel: MainViewModel,
     onInviteClick: () -> Unit,
     onEnterCodeClick: () -> Unit,
+    onCloseClick: () -> Unit
+) {
+    Scaffold(
+        containerColor = Color.White,
+        topBar = {
+            // 상단 바 영역
+            TopAppBar(
+                title = { }, // 제목은 비워둠
+                actions = {
+                    // 오른쪽 버튼들 (actions)
+                    IconButton(onClick = onCloseClick) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_close),
+                            contentDescription = "닫기",
+                            tint = Color.Black,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .padding(paddingValues) // 상단 바 영역만큼 띄워줌
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text("${viewModel.nickname}님, 가입을 축하드려요!", fontSize = 18.sp)
+            Text("상대방을 연결하고\n둘만의 추억을 쌓아가요",
+                fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // 프로필 이미지 영역
+            Box(
+                modifier = Modifier
+                    .size(width = 300.dp, height = 200.dp)
+                    .background(Color(0xFFE6E6E6)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (viewModel.profileImageUri != null) {
+                    AsyncImage(
+                        model = viewModel.profileImageUri,
+                        contentDescription = "프로필 이미지",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.LightGray)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(60.dp))
+
+            // 1. 상대방 코드 입력하기 버튼
+            Button(
+                onClick = onEnterCodeClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .border(1.dp, Color.Black, RoundedCornerShape(8.dp)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("상대방 코드 입력하기", color = Color.Black)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 2. 내 코드로 초대하기 버튼
+            Button(
+                onClick = onInviteClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("내 코드로 초대하기", color = Color.White)
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class) // TopAppBar 사용을 위해 필요
+@Composable
+fun ConnectionPendingScreen(
+    viewModel: MainViewModel,
+    onConnectClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("${viewModel.nickname}님, 가입을 축하드려요!", fontSize = 18.sp)
-        Text("상대방을 연결하고\n둘만의 추억을 쌓아가요",
-            fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(
+            "앗!\n아직 커플 연결이 되지 않았어요",
+            fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+        )
 
         Spacer(modifier = Modifier.height(40.dp))
 
+        // 프로필 이미지 영역
         Box(
             modifier = Modifier
                 .size(width = 300.dp, height = 200.dp)
@@ -1007,46 +1101,36 @@ fun ConnectMainScreen(
                     contentScale = ContentScale.Crop
                 )
             } else {
-                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.LightGray)
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = Color.LightGray
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(60.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
-// 1. 상대방 코드 입력하기 버튼 (흰색 배경 + 검은색 테두리/텍스트)
+        Text(
+            text = "연결을 완료하고 \n사진으로 일상을 공유해보세요!",
+            fontSize = 18.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+
         Button(
-            onClick = onEnterCodeClick,
+            onClick = onConnectClick,
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .border(1.dp, Color.Black, RoundedCornerShape(8.dp)), // 검은색 테두리 추가
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White // 배경 흰색
-            ),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text("상대방 코드 입력하기", color = Color.Black) // 텍스트 검은색
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-// 2. 내 코드로 초대하기 버튼 (검은색 배경 + 흰색 텍스트)
-        Button(
-            onClick = onInviteClick,
-            modifier = Modifier
+                .padding(horizontal = 96.dp)
                 .fillMaxWidth()
                 .height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black // 배경 검은색
-            ),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text("내 코드로 초대하기", color = Color.White) // 텍스트 흰색
+            Text("연결하러 가기 →", color = Color.White, fontSize = 16.sp)
         }
-
-//        TextButton(onClick = onLaterClick) {
-//            Text("다음에 할래요", color = Color.Gray, textDecoration = TextDecoration.Underline)
-//        }
     }
 }
 
