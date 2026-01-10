@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
     id("kotlin-parcelize")
+    alias(libs.plugins.hilt.android) // Hilt 플러그인 적용
+    id("kotlin-kapt") // 또는 id("com.google.devtools.ksp")
 }
 
 android {
@@ -25,7 +27,7 @@ android {
 
     defaultConfig {
         applicationId = "com.withus.app"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -66,6 +68,8 @@ dependencies {
 
     implementation(libs.bundles.camerax)
 
+    implementation(project(":data:datasource:remote"))
+
     implementation(libs.androidx.material3.android)
     implementation(libs.fragment.ktx)
     implementation(libs.androidx.ui)
@@ -98,4 +102,8 @@ dependencies {
     implementation("com.kakao.sdk:v2-user:2.20.6")
     implementation("com.kakao.sdk:v2-share:2.20.6")
 
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler) // 코드 생성을 위한 컴파일러
+    implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.accompanist.permissions)
 }

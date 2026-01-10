@@ -1,3 +1,4 @@
+import android.Manifest.permission.CAMERA
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -56,6 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.kakao.sdk.share.ShareClient
 import com.kakao.sdk.template.model.Button
 import com.kakao.sdk.template.model.Content
@@ -215,7 +220,7 @@ fun CalendarHomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun StepInputScreen(
     viewModel: MainViewModel,
@@ -226,6 +231,10 @@ fun StepInputScreen(
     var showSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
+
+    val cameraPermissionState = rememberPermissionState(
+        permission = CAMERA
+    )
 
     // 카메라/갤러리 런처 로직 (기존과 동일)
     val tempImageUri = remember {
@@ -246,10 +255,12 @@ fun StepInputScreen(
         viewModel.updateProfileImage(uri)
         showSheet = false
     }
+    // 에러 메시지 표시 로직
+    val isNicknameError = viewModel.nickname.isNotEmpty() && (viewModel.nickname.length < 2 || viewModel.nickname.length > 8)
 
     // 유효성 검사: 1단계는 닉네임 필수, 4단계는 건너뛰기 가능하므로 항상 true
     val currentValid = when(currentStep) {
-        1 -> viewModel.nickname.isNotBlank()
+        1 -> !isNicknameError
         else -> true
     }
 
@@ -331,9 +342,6 @@ fun StepInputScreen(
                         unfocusedContainerColor = Color(0xFFF0F0F0)
                     )
                 )
-
-                // 에러 메시지 표시 로직
-                val isNicknameError = viewModel.nickname.isNotEmpty() && (viewModel.nickname.length < 2 || viewModel.nickname.length > 8)
 
                 // 메시지 영역의 높이를 고정(height)하면 메시지가 나타날 때 UI가 덜컹거리는 것을 방지할 수 있습니다.
                 Box(modifier = Modifier.height(30.dp).padding(top = 8.dp)) {
@@ -460,7 +468,24 @@ fun StepInputScreen(
                     ListItem(
                         headlineContent = { Text("사진 촬영") },
                         leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
-                        modifier = Modifier.clickable { cameraLauncher.launch(tempImageUri) }
+                        modifier = Modifier.clickable {
+                            // 권한 체크 후 분기 처리
+                            when {
+                                cameraPermissionState.status.isGranted -> {
+                                    // 권한이 이미 있음: 카메라 바로 실행
+                                    cameraLauncher.launch(tempImageUri)
+                                }
+                                cameraPermissionState.status.shouldShowRationale -> {
+                                    // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
+                                    // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
+                                    cameraPermissionState.launchPermissionRequest()
+                                }
+                                else -> {
+                                    // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
+                                    cameraPermissionState.launchPermissionRequest()
+                                }
+                            }
+                        }
                     )
                     ListItem(
                         headlineContent = { Text("앨범에서 가져오기") },

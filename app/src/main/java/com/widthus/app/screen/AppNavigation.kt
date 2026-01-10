@@ -11,8 +11,10 @@ import HomeScreen
 import InviteScreen
 import StepInputScreen
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -21,14 +23,16 @@ import com.kakao.sdk.common.util.Utility
 import com.kakao.sdk.user.UserApiClient
 import com.widthus.app.DemoApplication
 import com.widthus.app.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 // ==========================================
 // 2. Navigation
 // ==========================================
 @Composable
-fun AppNavigation(viewModel: MainViewModel = viewModel()) {
-    val navController = rememberNavController()
+fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
+        val navController = rememberNavController()
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     // 뷰모델에서 데이터 가져오기
     val schedules = viewModel.dummySchedules
     val memories = viewModel.dummyMemories
@@ -54,7 +58,16 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
                         }
                         else if (token != null) {
                             Log.i("TAG", "로그인 성공 ${token.accessToken}")
-                            navController.navigate("step_input")
+                            coroutineScope.launch {
+                                val isSuccess = viewModel.handleKakaoLogin(token.accessToken)
+                                if (isSuccess) {
+                                    navController.navigate("step_input") {
+                                        popUpTo("login") { inclusive = true } // 로그인 화면 제거
+                                    }
+                                } else {
+                                    Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     }
 

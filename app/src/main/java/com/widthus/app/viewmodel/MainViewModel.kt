@@ -1,6 +1,7 @@
 package com.widthus.app.viewmodel
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,11 +10,22 @@ import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
 import com.widthus.app.model.OnboardingPage
 import com.withus.app.R
+import dagger.hilt.android.lifecycle.HiltViewModel
+import org.withus.app.token.TokenManager
+import org.withus.app.model.request.LoginRequest
+import org.withus.app.remote.ApiService
+import javax.inject.Inject
 
-class MainViewModel : ViewModel() {
+@HiltViewModel
+class MainViewModel @Inject constructor(
+    private val apiService: ApiService,
+    private val tokenManager: TokenManager
+) : ViewModel() {
     // 1단계: 닉네임
     var nickname by mutableStateOf("")
         private set
+
+    var jwtToken = String()
 
     var partnerNickname by mutableStateOf("감자")
         private set
@@ -80,5 +92,40 @@ class MainViewModel : ViewModel() {
 
     fun updateSelectedImage(uri: Uri?) {
         selectedImageUri = uri
+    }
+
+    /**
+     * 카카오 로그인 처리
+     * NetworkModule에서 제공된 apiService를 사용합니다.
+     */
+    suspend fun handleKakaoLogin(token: String): Boolean {
+        return try {
+            // 1. 요청 객체 생성
+            val request = LoginRequest(oauthToken = token)
+
+            // 2. NetworkModule에서 주입받은 apiService 사용
+            val response = apiService.login("kakao", request)
+
+            // 3. 응답 처리
+            if (response.isSuccessful && response.body()?.success == true) {
+                val serverToken = response.body()?.data?.jwt
+                Log.d("LOGIN", "서버 로그인 성공: $serverToken")
+
+                if (serverToken != null) {
+                    jwtToken = serverToken
+                    // TokenManager를 통해 토큰을 저장 (Interceptor에서 사용됨)
+                    tokenManager.saveAccessToken(serverToken)
+                    true
+                } else {
+                    false
+                }
+            } else {
+                Log.e("LOGIN", "로그인 실패: ${response.errorBody()?.string()}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e("LOGIN", "네트워크 오류 발생", e)
+            false
+        }
     }
 }

@@ -29,4 +29,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CmcDemoApp"
 include(":app")
- 
+include(":data:datasource:remote")

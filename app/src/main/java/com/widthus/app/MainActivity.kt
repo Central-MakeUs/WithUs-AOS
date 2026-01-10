@@ -9,7 +9,10 @@ import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.widthus.app.fragment.ComposeFragment
 import com.withus.app.R
+import dagger.hilt.android.AndroidEntryPoint
 
+
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
 

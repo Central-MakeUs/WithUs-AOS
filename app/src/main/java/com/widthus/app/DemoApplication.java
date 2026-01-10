@@ -7,8 +7,10 @@ import android.content.Context;
 import com.kakao.sdk.common.KakaoSdk;
 import com.withus.app.BuildConfig;
 
+import dagger.hilt.android.HiltAndroidApp;
 import timber.log.Timber;
 
+@HiltAndroidApp
 public class DemoApplication extends Application {
     private static DemoApplication instance;
 
