@@ -94,4 +94,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation(libs.timber)
+
+    implementation("com.kakao.sdk:v2-user:2.20.6")
+    implementation("com.kakao.sdk:v2-share:2.20.6")
+
 }

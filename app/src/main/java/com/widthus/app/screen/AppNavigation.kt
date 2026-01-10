@@ -10,11 +10,16 @@ import EnterCodeScreen
 import HomeScreen
 import InviteScreen
 import StepInputScreen
+import android.util.Log
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.kakao.sdk.common.util.Utility
+import com.kakao.sdk.user.UserApiClient
+import com.widthus.app.DemoApplication
 import com.widthus.app.viewmodel.MainViewModel
 
 // ==========================================
@@ -23,7 +28,7 @@ import com.widthus.app.viewmodel.MainViewModel
 @Composable
 fun AppNavigation(viewModel: MainViewModel = viewModel()) {
     val navController = rememberNavController()
-
+    val context = LocalContext.current
     // 뷰모델에서 데이터 가져오기
     val schedules = viewModel.dummySchedules
     val memories = viewModel.dummyMemories
@@ -40,7 +45,19 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
         composable("login") {
             LoginScreen(
                 onKakaoLogin = {
-                    navController.navigate("step_input")
+                    UserApiClient.instance.loginWithKakaoTalk(context) { token, error ->
+                        if (error != null) {
+                            Log.e("TAG", "로그인 실패", error)
+
+                            val keyHash = Utility.getKeyHash(context)
+                            Log.e("KeyHash", "현재 내 기기의 키 해시: $keyHash")
+                        }
+                        else if (token != null) {
+                            Log.i("TAG", "로그인 성공 ${token.accessToken}")
+                            navController.navigate("step_input")
+                        }
+                    }
+
                 },
                 onGoogleLogin = {
                     navController.navigate("step_input")
@@ -51,7 +68,7 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
         composable("step_input") {
             StepInputScreen(
                 viewModel = viewModel,
-                onAllFinish = { navController.navigate("connect") }
+                onAllFinish = { navController.navigate("onboarding_connect") }
             )
         }
 
@@ -103,13 +120,13 @@ fun AppNavigation(viewModel: MainViewModel = viewModel()) {
 
         composable("invite") {
             InviteScreen(
-                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("connect") }
+                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("onboarding_connect") }
             )
         }
 
         composable("enter_code") {
             EnterCodeScreen(
-                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("connect") },
+                onBack = { if (viewModel.nickname.isNotEmpty()) navController.navigate("onboarding_connect") },
                 onConnect = {
                     navController.navigate("connect_confirm")
                 }

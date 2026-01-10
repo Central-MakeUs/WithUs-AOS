@@ -1,8 +1,10 @@
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -54,6 +56,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import com.kakao.sdk.share.ShareClient
+import com.kakao.sdk.template.model.Button
+import com.kakao.sdk.template.model.Content
+import com.kakao.sdk.template.model.FeedTemplate
+import com.kakao.sdk.template.model.Link
 import com.widthus.app.model.CalendarDay
 import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
@@ -355,18 +362,14 @@ fun StepInputScreen(
                     // 4단계: 프로필 이미지 등록
                     Box(
                         modifier = Modifier
-                            .size(160.dp), // 전체 영역 (이미지 150dp + 버튼이 삐져나올 공간)
+                            .size(160.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         // 1. 메인 프로필 원형 박스 (테두리 검정, 안쪽 회색)
                         Box(
                             modifier = Modifier
                                 .size(150.dp)
-                                .border(
-                                    width = 2.dp,
-                                    color = Color.Black, // 테두리는 검은색
-                                    shape = CircleShape
-                                )
+
                                 .background(Color(0xFFD9D9D9), CircleShape) // 안쪽은 회색 배경
                                 .clip(CircleShape)
                                 .clickable {
@@ -1358,7 +1361,51 @@ fun InviteScreen(onBack: () -> Unit) {
 
                 // 3. 링크 공유 버튼 (검정 배경)
                 Button(
-                    onClick = { /* 공유 로직 */ },
+                    onClick = {
+                        // 1. 공유할 텍스트 내용 작성
+
+                        val shareText = "[위더스] 상대방이 보낸 초대 코드: $myCode\n\n" +
+                                "아래 링크를 누르면 바로 연결 화면으로 이동해요!\n" +
+                                "widthus://connect?code=$myCode" // 👈 커스텀 스킴 적용
+
+                        // 2. 공유를 위한 인텐트 생성
+                        val sendIntent: Intent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, shareText) // 공유할 텍스트 삽입
+                            type = "text/plain" // 전송 데이터 타입 (일반 텍스트)
+                        }
+
+                        // 버튼 클릭 시 실행
+                        val defaultFeed = FeedTemplate(
+                            content = Content(
+                                title = "위더스(WITHÜS) 초대",
+                                description = "상대방이 보낸 초대 코드: $myCode",
+                                imageUrl = "https://your-image-url.com/logo.png", // 앱 로고나 대표 이미지 URL
+                                link = Link(androidExecutionParams = mapOf("invite_code" to myCode))
+                            ),
+                            buttons = listOf(
+                                Button(
+                                    "앱에서 연결하기",
+                                    Link(androidExecutionParams = mapOf("invite_code" to myCode))
+                                )
+                            )
+                        )
+
+                        // 카카오톡 설치 여부 확인 후 공유
+                        if (ShareClient.instance.isKakaoTalkSharingAvailable(context)) {
+                            ShareClient.instance.shareDefault(context, defaultFeed) { sharingResult, error ->
+                                if (error != null) {
+                                    Log.e("KAKAO", "공유 실패", error)
+                                } else if (sharingResult != null) {
+                                    context.startActivity(sharingResult.intent)
+                                }
+                            }
+                        }
+
+                        // 3. 공유 선택창(Chooser) 띄우기
+//                        val shareIntent = Intent.createChooser(sendIntent, "초대 코드 공유하기")
+//                        context.startActivity(shareIntent)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),

@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -30,15 +32,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
 import kotlinx.coroutines.launch
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(
@@ -59,28 +62,49 @@ fun OnboardingScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 상단 이미지 영역
-            Spacer(modifier = Modifier.height(155.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(200.dp)
-                    .background(Color(0xFFE6E6E6)),
-                contentAlignment = Alignment.Center
-            ) {
-                /* ... 이미지 로직 생략 ... */
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // 1. 텍스트 페이저 (필요한 만큼만 높이 차지)
+            // 1. 전체 내용을 담은 페이저 (이미지 + 텍스트)
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .weight(1f) // 페이저가 버튼 위쪽의 모든 공간을 차지하게 함
+                    .fillMaxWidth()
             ) { pageIndex ->
                 Column(
+                    modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // 상단 여백 (이미지 위치 조정)
+                    Spacer(modifier = Modifier.height(155.dp))
+
+                    // 이미지 영역 (이제 페이저 안에 있음)
+                    Box(
+                        modifier = Modifier
+                            .size(200.dp)
+                            .background(Color(0xFFE6E6E6)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // 각 페이지별 이미지를 가져와서 표시 (예: pages[pageIndex].image)
+                        // 여기서는 일단 기존 로직 유지
+                        if (viewModel.profileImageUri != null) {
+                            AsyncImage(
+                                model = viewModel.profileImageUri,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                tint = Color.LightGray
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // 텍스트 영역
                     Text(
                         text = pages[pageIndex].title,
                         fontSize = 32.sp,
@@ -103,13 +127,10 @@ fun OnboardingScreen(
                 }
             }
 
-            // ⭐ 핵심: 여기서 나머지 모든 빈 공간을 다 차지해서 아래 컴포넌트들을 바닥으로 밀어냅니다.
-            Spacer(modifier = Modifier.weight(1f))
-
-            // 2. 인디케이터 (바닥 근처)
+            // 2. 인디케이터 (페이저 바깥 하단 고정)
             Row(
                 Modifier
-                    .height(30.dp) // 높이를 줄여서 버튼과 더 가깝게 배치 가능
+                    .height(30.dp)
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
@@ -129,41 +150,29 @@ fun OnboardingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp)) // 인디케이터와 버튼 사이 간격
+            Spacer(modifier = Modifier.height(40.dp))
 
             // 3. 하단 버튼
             val isLastPage = pagerState.currentPage == pages.size - 1
 
-            // 마지막 페이지가 아닐 때도 '다음' 버튼을 보여주려면 if(isLastPage)를 제거하세요.
-            // 현재는 마지막 페이지에서만 버튼이 나타납니다.
             if (isLastPage) {
                 Button(
-                    onClick = {
-                        if (isLastPage) onFinish()
-                        else {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                            }
-                        }
-                    },
+                    onClick = onFinish,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isLastPage) Color.Black else Color(0xFFF0F0F0)
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
                 ) {
                     Text(
-                        text = if (isLastPage) "시작하기" else "다음",
+                        text = "시작하기",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isLastPage) Color.White else Color.Gray
+                        color = Color.White
                     )
                 }
             }
 
-            // 바닥에서의 최종 마진 (기기 하단 바와의 간격)
             Spacer(modifier = Modifier.height(46.dp))
         }
     }
@@ -227,10 +236,9 @@ fun LoginScreen(
                 elevation = ButtonDefaults.buttonElevation(0.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_kakao_logo), // 카카오 아이콘 필요
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_kakao_logo),
                         contentDescription = null,
-                        tint = Color.Black,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
