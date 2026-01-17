@@ -53,6 +53,10 @@ class MainViewModel @Inject constructor(
     var profileImageUri by mutableStateOf<Uri?>(null)
         private set
 
+    var userUploadedImage by mutableStateOf<Uri?>(null)
+
+    var partnerUploadedImage by mutableStateOf<Uri?>(null)
+
     fun updateProfileImage(uri: Uri?) {
         profileImageUri = uri
     }

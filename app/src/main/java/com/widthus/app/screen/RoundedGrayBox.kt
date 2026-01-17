@@ -47,6 +47,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -79,6 +80,7 @@ import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
 import com.widthus.app.screen.AppNavigation
 import com.widthus.app.utils.Utils.calculateRemainingTime
+import com.widthus.app.utils.Utils.checkIsTimePassed
 import com.widthus.app.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import java.io.File
@@ -94,20 +96,18 @@ fun TestHomeScreen(
     onNavigateToCalendar: () -> Unit
 ) {
     Scaffold(
-        topBar = { TopTitleBar("LOGO") },
-        bottomBar = {
-            Column {
-                Button(
-                    onClick = onNavigateToCalendar,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
-                ) { Text("다음 화면 (캘린더) 보기") }
-                AppBottomNavigation()
-            }
-        },
-        containerColor = Color.White
+        topBar = { TopTitleBar("LOGO") }, bottomBar = {
+        Column {
+            Button(
+                onClick = onNavigateToCalendar,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+            ) { Text("다음 화면 (캘린더) 보기") }
+            AppBottomNavigation()
+        }
+    }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -163,28 +163,24 @@ fun TestHomeScreen(
 
 @Composable
 fun CalendarHomeScreen(
-    nickname: String,
-    memories: List<MemoryItem>,
-    onNavigateToDayUs: () -> Unit
+    nickname: String, memories: List<MemoryItem>, onNavigateToDayUs: () -> Unit
 ) {
     val today = remember { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) }
     var selectedDate by remember { mutableStateOf(today) }
 
     Scaffold(
-        topBar = { TopTitleBar("LOGO") },
-        bottomBar = {
-            Column {
-                Button(
-                    onClick = onNavigateToDayUs,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                ) { Text("다음 화면 (DAYUS) 보기") }
-                AppBottomNavigation()
-            }
-        },
-        containerColor = Color.White
+        topBar = { TopTitleBar("LOGO") }, bottomBar = {
+        Column {
+            Button(
+                onClick = onNavigateToDayUs,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+            ) { Text("다음 화면 (DAYUS) 보기") }
+            AppBottomNavigation()
+        }
+    }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -212,9 +208,7 @@ fun CalendarHomeScreen(
 
             // 주간 캘린더 영역
             WeeklyCalendar(
-                selectedDate = selectedDate,
-                onDateSelected = { newDate -> selectedDate = newDate }
-            )
+                selectedDate = selectedDate, onDateSelected = { newDate -> selectedDate = newDate })
 
             // 일정 안내 문구
             RoundedGrayBox(
@@ -242,8 +236,7 @@ fun CalendarHomeScreen(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun StepInputScreen(
-    viewModel: MainViewModel,
-    onAllFinish: () -> Unit
+    viewModel: MainViewModel, onAllFinish: () -> Unit
 ) {
     // 이제 단계는 1(닉네임)과 4(프로필)만 사용합니다.
     var currentStep by remember { mutableStateOf(1) }
@@ -285,8 +278,7 @@ fun StepInputScreen(
     }
 
     Scaffold(
-        containerColor = Color.White,
-        topBar = {
+        containerColor = Color.White, topBar = {
             // 4단계(프로필)일 때만 뒤로가기 버튼 표시
             if (currentStep == 4) {
                 Box(
@@ -303,8 +295,7 @@ fun StepInputScreen(
                     }
                 }
             }
-        }
-    ) { paddingValues ->
+        }) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -323,8 +314,7 @@ fun StepInputScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = if (currentStep == 1)
-                    "상대방에게 주로 불리는 애칭을 입력해도 좋아요"
+                text = if (currentStep == 1) "상대방에게 주로 불리는 애칭을 입력해도 좋아요"
                 else "사진을 등록하지 않으면 기본 프로필이 보여집니다.",
                 fontSize = 16.sp,
                 color = Color.Gray,
@@ -340,14 +330,11 @@ fun StepInputScreen(
                     value = viewModel.nickname,
                     onValueChange = { if (it.length <= 8) viewModel.updateNickname(it) },
                     textStyle = LocalTextStyle.current.copy(
-                        fontSize = 18.sp,
-                        textAlign = TextAlign.Center,
-                        color = Color.Black
+                        fontSize = 18.sp, textAlign = TextAlign.Center, color = Color.Black
                     ),
                     placeholder = {
                         Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
+                            modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center
                         ) {
                             Text("닉네임을 입력해주세요.", color = Color(0xFFC7C7C7), fontSize = 18.sp)
                         }
@@ -367,9 +354,11 @@ fun StepInputScreen(
                 )
 
                 // 메시지 영역의 높이를 고정(height)하면 메시지가 나타날 때 UI가 덜컹거리는 것을 방지할 수 있습니다.
-                Box(modifier = Modifier
-                    .height(30.dp)
-                    .padding(top = 8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .height(30.dp)
+                        .padding(top = 8.dp)
+                ) {
                     if (isNicknameError) {
                         Text(
                             text = "2~8자 이내로 입력해주세요.",
@@ -389,14 +378,11 @@ fun StepInputScreen(
                             if (viewModel.profileImageUri == null) {
                                 showSheet = true
                             }
-                        },
-                    contentAlignment = Alignment.Center
+                        }, contentAlignment = Alignment.Center
                 ) {
                     // 4단계: 프로필 이미지 등록
                     Box(
-                        modifier = Modifier
-                            .size(160.dp),
-                        contentAlignment = Alignment.Center
+                        modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center
                     ) {
                         // 1. 메인 프로필 원형 박스 (테두리 검정, 안쪽 회색)
                         Box(
@@ -407,8 +393,7 @@ fun StepInputScreen(
                                 .clip(CircleShape)
                                 .clickable {
                                     if (viewModel.profileImageUri == null) showSheet = true
-                                },
-                            contentAlignment = Alignment.Center
+                                }, contentAlignment = Alignment.Center
                         ) {
                             if (viewModel.profileImageUri != null) {
                                 // 이미지가 있을 때: 사진 표시
@@ -495,45 +480,35 @@ fun StepInputScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
-                    ListItem(
-                        headlineContent = { Text("사진 촬영") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Default.AccountCircle,
-                                contentDescription = null
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            // 권한 체크 후 분기 처리
-                            when {
-                                cameraPermissionState.status.isGranted -> {
-                                    // 권한이 이미 있음: 카메라 바로 실행
-                                    cameraLauncher.launch(tempImageUri)
-                                }
+                    ListItem(headlineContent = { Text("사진 촬영") }, leadingContent = {
+                        Icon(
+                            Icons.Default.AccountCircle, contentDescription = null
+                        )
+                    }, modifier = Modifier.clickable {
+                        // 권한 체크 후 분기 처리
+                        when {
+                            cameraPermissionState.status.isGranted -> {
+                                // 권한이 이미 있음: 카메라 바로 실행
+                                cameraLauncher.launch(tempImageUri)
+                            }
 
-                                cameraPermissionState.status.shouldShowRationale -> {
-                                    // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
-                                    // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
-                                    cameraPermissionState.launchPermissionRequest()
-                                }
+                            cameraPermissionState.status.shouldShowRationale -> {
+                                // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
+                                // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
+                                cameraPermissionState.launchPermissionRequest()
+                            }
 
-                                else -> {
-                                    // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
-                                    cameraPermissionState.launchPermissionRequest()
-                                }
+                            else -> {
+                                // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
+                                cameraPermissionState.launchPermissionRequest()
                             }
                         }
-                    )
-                    ListItem(
-                        headlineContent = { Text("앨범에서 가져오기") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Default.DateRange,
-                                contentDescription = null
-                            )
-                        },
-                        modifier = Modifier.clickable { galleryLauncher.launch("image/*") }
-                    )
+                    })
+                    ListItem(headlineContent = { Text("앨범에서 가져오기") }, leadingContent = {
+                        Icon(
+                            Icons.Default.DateRange, contentDescription = null
+                        )
+                    }, modifier = Modifier.clickable { galleryLauncher.launch("image/*") })
                 }
             }
         }
@@ -543,27 +518,24 @@ fun StepInputScreen(
 // --- 홈 화면 ---
 @Composable
 fun TestHomeScreen(
-    nickname: String,
-    onNavigateToCalendar: () -> Unit
+    nickname: String, onNavigateToCalendar: () -> Unit
 ) {
     Scaffold(
-        topBar = { TopTitleBar("LOGO") },
-        bottomBar = {
-            // 데모용: 네비게이션 바 대신 다음 화면 버튼 포함
-            Column {
-                Button(
-                    onClick = onNavigateToCalendar,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
-                ) {
-                    Text("다음 화면 (캘린더) 보기")
-                }
-                AppBottomNavigation()
+        topBar = { TopTitleBar("LOGO") }, bottomBar = {
+        // 데모용: 네비게이션 바 대신 다음 화면 버튼 포함
+        Column {
+            Button(
+                onClick = onNavigateToCalendar,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+            ) {
+                Text("다음 화면 (캘린더) 보기")
             }
-        },
-        containerColor = Color.White
+            AppBottomNavigation()
+        }
+    }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -618,26 +590,23 @@ fun TestHomeScreen(
 // --- 캘린더 홈 화면 ---
 @Composable
 fun CalendarHomeScreen(
-    nickname: String,
-    onNavigateToDayUs: () -> Unit
+    nickname: String, onNavigateToDayUs: () -> Unit
 ) {
     Scaffold(
-        topBar = { TopTitleBar("LOGO") },
-        bottomBar = {
-            Column {
-                Button(
-                    onClick = onNavigateToDayUs,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                ) {
-                    Text("다음 화면 (DAYUS) 보기")
-                }
-                AppBottomNavigation()
+        topBar = { TopTitleBar("LOGO") }, bottomBar = {
+        Column {
+            Button(
+                onClick = onNavigateToDayUs,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+            ) {
+                Text("다음 화면 (DAYUS) 보기")
             }
-        },
-        containerColor = Color.White
+            AppBottomNavigation()
+        }
+    }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -673,58 +642,48 @@ fun CalendarHomeScreen(
 fun DayUsScreen() {
     Scaffold(
         topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = "DAYUS", fontSize = 20.sp, fontWeight = FontWeight.Black)
-                Icon(imageVector = Icons.Default.DateRange, contentDescription = "Calendar")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "DAYUS", fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Icon(imageVector = Icons.Default.DateRange, contentDescription = "Calendar")
+        }
+    }, bottomBar = {
+        // 커스텀 하단 바 (FAB가 중앙에 있는 형태)
+        BottomAppBar(containerColor = Color.White, tonalElevation = 10.dp, actions = {
+            IconButton(onClick = {}) {
+                Icon(
+                    Icons.Outlined.GridView, contentDescription = "Menu"
+                )
             }
-        },
-        bottomBar = {
-            // 커스텀 하단 바 (FAB가 중앙에 있는 형태)
-            BottomAppBar(
-                containerColor = Color.White,
-                tonalElevation = 10.dp,
-                actions = {
-                    IconButton(onClick = {}) {
-                        Icon(
-                            Icons.Outlined.GridView,
-                            contentDescription = "Menu"
-                        )
-                    }
-                    Spacer(modifier = Modifier.weight(1f)) // 중앙 공간 확보
-                    IconButton(onClick = {}) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = "Profile",
-                            tint = Color.LightGray
-                        )
-                    }
-                },
-                floatingActionButton = {
-                    FloatingActionButton(
-                        onClick = {},
-                        containerColor = Color(0xFF1C1C1E), // 검은색에 가까운 다크그레이
-                        contentColor = Color.White,
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .size(64.dp)
-                            .offset(y = (-10).dp) // 살짝 위로 올림
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "Add",
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
-            )
-        },
-        containerColor = Color.White
+            Spacer(modifier = Modifier.weight(1f)) // 중앙 공간 확보
+            IconButton(onClick = {}) {
+                Icon(
+                    Icons.Default.Person, contentDescription = "Profile", tint = Color.LightGray
+                )
+            }
+        }, floatingActionButton = {
+            FloatingActionButton(
+                onClick = {},
+                containerColor = Color(0xFF1C1C1E), // 검은색에 가까운 다크그레이
+                contentColor = Color.White,
+                shape = CircleShape,
+                modifier = Modifier
+                    .size(64.dp)
+                    .offset(y = (-10).dp) // 살짝 위로 올림
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Add",
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        })
+    }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -755,8 +714,7 @@ fun DayUsScreen() {
                         brush = Brush.verticalGradient(
                             colors = listOf(Color(0xFF555555), Color(0xFF333333))
                         )
-                    ),
-                contentAlignment = Alignment.Center
+                    ), contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     // 잠금 아이콘 + 원 (겹친 느낌 단순화)
@@ -787,8 +745,7 @@ fun DayUsScreen() {
             ) {
                 // 플러스 아이콘 + 원
                 Box(
-                    modifier = Modifier.size(40.dp),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center
                 ) {
                     // 아이콘 겹침 효과 흉내
                     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -909,8 +866,7 @@ fun MemoryGridSection(memories: List<MemoryItem>) {
             PhotoBox(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
-                imageResId = firstImg
+                    .fillMaxHeight(), imageResId = firstImg
             )
 
             // 오른쪽 컬럼
@@ -998,8 +954,7 @@ fun WeeklyCalendar(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp)) // 클릭 영역 제한
                     .clickable { onDateSelected(day.date) }
-                    .padding(4.dp)
-            ) {
+                    .padding(4.dp)) {
                 // 날짜 원형 배경
                 Box(
                     modifier = Modifier
@@ -1007,8 +962,7 @@ fun WeeklyCalendar(
                         .clip(CircleShape)
                         .background(
                             if (isCurrentSelected) Color.Black else Color(0xFFEEEEEE)
-                        ),
-                    contentAlignment = Alignment.Center
+                        ), contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = day.date.toString(),
@@ -1040,7 +994,8 @@ fun TopTitleBar(title: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp), contentAlignment = Alignment.Center
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
     }
@@ -1082,7 +1037,8 @@ fun MemoryGridSection() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .height(200.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         RoundedGrayBox(
             modifier = Modifier
@@ -1092,7 +1048,8 @@ fun MemoryGridSection() {
         Column(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             RoundedGrayBox(
                 modifier = Modifier
@@ -1117,8 +1074,7 @@ fun OnboardingConnectScreen(
     onCloseClick: () -> Unit
 ) {
     Scaffold(
-        containerColor = Color.White,
-        topBar = {
+        containerColor = Color.White, topBar = {
             // 상단 바 영역
             TopAppBar(
                 title = { }, // 제목은 비워둠
@@ -1132,13 +1088,11 @@ fun OnboardingConnectScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
+                }, colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.White
                 )
             )
-        }
-    ) { paddingValues ->
+        }) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues) // 상단 바 영역만큼 띄워줌
@@ -1150,7 +1104,9 @@ fun OnboardingConnectScreen(
             Text("${viewModel.nickname}님, 가입을 축하드려요!", fontSize = 18.sp)
             Text(
                 "상대방을 연결하고\n둘만의 추억을 쌓아가요",
-                fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -1159,8 +1115,7 @@ fun OnboardingConnectScreen(
             Box(
                 modifier = Modifier
                     .size(width = 300.dp, height = 200.dp)
-                    .background(Color(0xFFE6E6E6)),
-                contentAlignment = Alignment.Center
+                    .background(Color(0xFFE6E6E6)), contentAlignment = Alignment.Center
             ) {
                 if (viewModel.profileImageUri != null) {
                     AsyncImage(
@@ -1248,8 +1203,7 @@ fun ConnectionPendingScreen(
                 modifier = Modifier
                     .size(220.dp)
                     .clip(RoundedCornerShape(32.dp)) // 이미지와 유사한 둥근 모서리
-                    .background(Color(0xFFF0F0F0)),
-                contentAlignment = Alignment.Center
+                    .background(Color(0xFFF0F0F0)), contentAlignment = Alignment.Center
             ) {
                 if (viewModel.profileImageUri != null) {
                     AsyncImage(
@@ -1310,9 +1264,7 @@ fun ConnectionPendingScreen(
 
 @Composable
 fun ConnectConfirmScreen(
-    viewModel: MainViewModel,
-    onConfirmClick: () -> Unit,
-    onLaterClick: () -> Unit
+    viewModel: MainViewModel, onConfirmClick: () -> Unit, onLaterClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1323,7 +1275,9 @@ fun ConnectConfirmScreen(
     ) {
         Text(
             "${viewModel.nickname}님이\n ${viewModel.partnerNickname} 님을 초대했어요!",
-            fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
         )
         Text("초대를 수락하면, 두 사람의 기록이 이어져요", fontSize = 18.sp)
 
@@ -1389,7 +1343,9 @@ fun ConnectCompleteScreen(
     ) {
         Text(
             "커플 연결 완료!",
-            fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
         )
         Text("둘만의 사진 기록을 시작해 보세요", fontSize = 18.sp)
 
@@ -1475,16 +1431,16 @@ fun InviteScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
-        containerColor = Color.White,
-        topBar = {
+        containerColor = Color.White, topBar = {
             IconButton(onClick = onBack, modifier = Modifier.padding(16.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
             }
-        }
-    ) { paddingValues ->
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)) {
+        }) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1568,9 +1524,8 @@ fun InviteScreen(onBack: () -> Unit) {
                     onClick = {
                         // 1. 공유할 텍스트 내용 작성
 
-                        val shareText = "[위더스] 상대방이 보낸 초대 코드: $myCode\n\n" +
-                                "아래 링크를 누르면 바로 연결 화면으로 이동해요!\n" +
-                                "widthus://connect?code=$myCode" // 👈 커스텀 스킴 적용
+                        val shareText =
+                            "[위더스] 상대방이 보낸 초대 코드: $myCode\n\n" + "아래 링크를 누르면 바로 연결 화면으로 이동해요!\n" + "widthus://connect?code=$myCode" // 👈 커스텀 스킴 적용
 
                         // 2. 공유를 위한 인텐트 생성
                         val sendIntent: Intent = Intent().apply {
@@ -1586,8 +1541,7 @@ fun InviteScreen(onBack: () -> Unit) {
                                 description = "상대방이 보낸 초대 코드: $myCode",
                                 imageUrl = "https://your-image-url.com/logo.png", // 앱 로고나 대표 이미지 URL
                                 link = Link(androidExecutionParams = mapOf("invite_code" to myCode))
-                            ),
-                            buttons = listOf(
+                            ), buttons = listOf(
                                 Button(
                                     "앱에서 연결하기",
                                     Link(androidExecutionParams = mapOf("invite_code" to myCode))
@@ -1598,8 +1552,7 @@ fun InviteScreen(onBack: () -> Unit) {
                         // 카카오톡 설치 여부 확인 후 공유
                         if (ShareClient.instance.isKakaoTalkSharingAvailable(context)) {
                             ShareClient.instance.shareDefault(
-                                context,
-                                defaultFeed
+                                context, defaultFeed
                             ) { sharingResult, error ->
                                 if (error != null) {
                                     Log.e("KAKAO", "공유 실패", error)
@@ -1670,37 +1623,33 @@ fun EnterCodeScreen(onBack: () -> Unit, onConnect: (String) -> Unit) {
     var isError by remember { mutableStateOf(true) } // 에러 상태 추가
 
     // 키보드가 올라올 때 버튼이 밀려 올라오도록 Scaffold 사용
-    Scaffold(
-        containerColor = Color.White,
-        topBar = {
-            IconButton(onClick = onBack, modifier = Modifier.padding(16.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-            }
-        },
-        bottomBar = {
-            // 하단 버튼 영역: IME(키보드)에 반응하여 자동으로 위치 조절
-            Box(
+    Scaffold(containerColor = Color.White, topBar = {
+        IconButton(onClick = onBack, modifier = Modifier.padding(16.dp)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+        }
+    }, bottomBar = {
+        // 하단 버튼 영역: IME(키보드)에 반응하여 자동으로 위치 조절
+        Box(
+            modifier = Modifier
+                .navigationBarsPadding() // 네비게이션 바 대응
+                .imePadding() // 키보드가 올라오면 그만큼 패딩 추가
+                .padding(24.dp)
+        ) {
+            Button(
+                onClick = { onConnect(codeInput) },
+                enabled = isComplete,
                 modifier = Modifier
-                    .navigationBarsPadding() // 네비게이션 바 대응
-                    .imePadding() // 키보드가 올라오면 그만큼 패딩 추가
-                    .padding(24.dp)
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isComplete) Color.Black else Color(0xFFE0E0E0)
+                ),
+                shape = RoundedCornerShape(28.dp)
             ) {
-                Button(
-                    onClick = { onConnect(codeInput) },
-                    enabled = isComplete,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isComplete) Color.Black else Color(0xFFE0E0E0)
-                    ),
-                    shape = RoundedCornerShape(28.dp)
-                ) {
-                    Text("연결하기", color = Color.White, fontSize = 18.sp)
-                }
+                Text("연결하기", color = Color.White, fontSize = 18.sp)
             }
         }
-    ) { paddingValues ->
+    }) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1711,7 +1660,9 @@ fun EnterCodeScreen(onBack: () -> Unit, onConnect: (String) -> Unit) {
             Spacer(modifier = Modifier.height(40.dp))
             Text(
                 "상대방에게 받은 코드를\n입력해 주세요",
-                fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(60.dp))
@@ -1764,8 +1715,7 @@ fun EnterCodeScreen(onBack: () -> Unit, onConnect: (String) -> Unit) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             innerTextField()
                         }
-                    }
-                )
+                    })
             }
 
             if (isError) {
@@ -1824,8 +1774,7 @@ fun isValidDate(dateString: String): Boolean {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun KeywordSelectionScreen(
-    onBackClick: () -> Unit,
-    onNextClick: (Set<String>) -> Unit
+    onBackClick: () -> Unit, onNextClick: (Set<String>) -> Unit
 ) {
     // 기본 키워드 리스트 (가변 리스트로 선언하여 추가 가능하게 함)
     var keywordList by remember {
@@ -1835,9 +1784,7 @@ fun KeywordSelectionScreen(
     var showAddSheet by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Color.White,
-        topBar = { /* 뒤로가기 버튼 로직 동일 */ }
-    ) { paddingValues ->
+        containerColor = Color.White, topBar = { /* 뒤로가기 버튼 로직 동일 */ }) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -1850,21 +1797,17 @@ fun KeywordSelectionScreen(
             Spacer(modifier = Modifier.height(60.dp))
 
             FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
             ) {
                 keywordList.forEach { keyword ->
                     KeywordChip(
-                        text = keyword,
-                        isSelected = selectedKeywords.contains(keyword),
-                        onClick = {
+                        text = keyword, isSelected = selectedKeywords.contains(keyword), onClick = {
                             selectedKeywords = if (selectedKeywords.contains(keyword)) {
                                 selectedKeywords - keyword
                             } else {
                                 selectedKeywords + keyword
                             }
-                        }
-                    )
+                        })
                 }
 
                 // + 직접 추가 버튼 클릭 시 바텀 시트 노출
@@ -1895,8 +1838,7 @@ fun KeywordSelectionScreen(
                         keywordList = keywordList + newKeyword
                         selectedKeywords = selectedKeywords + newKeyword // 추가하자마자 선택 상태로
                     }
-                }
-            )
+                })
         }
     }
 }
@@ -1904,8 +1846,7 @@ fun KeywordSelectionScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NotificationTimeScreen(
-    onBackClick: () -> Unit,
-    onFinish: (String) -> Unit // "08:00 PM" 형식으로 전달
+    onBackClick: () -> Unit, onFinish: (String) -> Unit // "08:00 PM" 형식으로 전달
 ) {
     // 1. 데이터 정의
     val hours = (1..12).toList()
@@ -1918,13 +1859,11 @@ fun NotificationTimeScreen(
     val amPmPagerState = rememberPagerState(initialPage = 1) { amPm.size }
 
     Scaffold(
-        containerColor = Color.White,
-        topBar = {
+        containerColor = Color.White, topBar = {
             IconButton(onClick = onBackClick) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
             }
-        }
-    ) { padding ->
+        }) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -1944,8 +1883,7 @@ fun NotificationTimeScreen(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth(), contentAlignment = Alignment.Center
             ) {
                 // 선택 영역 강조 배경
                 Surface(
@@ -1975,8 +1913,7 @@ fun NotificationTimeScreen(
 
             // 4. 완료 버튼 클릭 시 실제 선택된 값 추출
             WithUsButton(
-                text = "설정 완료하기",
-                onClick = {
+                text = "설정 완료하기", onClick = {
                     val finalHour = hours[hourPagerState.currentPage]
                     val finalMinute = minutes[minutePagerState.currentPage]
                     val finalAmPm = amPm[amPmPagerState.currentPage]
@@ -1984,8 +1921,7 @@ fun NotificationTimeScreen(
                         String.format("%02d:%02d %s", finalHour, finalMinute, finalAmPm)
 
                     onFinish(timeResult) // 예: "08:00 PM"
-                },
-                modifier = Modifier.padding(bottom = 24.dp)
+                }, modifier = Modifier.padding(bottom = 24.dp)
             )
         }
     }
@@ -1994,26 +1930,21 @@ fun NotificationTimeScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun <T> WheelPicker(
-    state: PagerState,
-    items: List<T>,
-    format: String? = null
+    state: PagerState, items: List<T>, format: String? = null
 ) {
     VerticalPager(
-        state = state,
-        modifier = Modifier
+        state = state, modifier = Modifier
             .width(60.dp)
             .height(150.dp), // 3개 정도 보이게 높이 조절
         contentPadding = PaddingValues(vertical = 50.dp) // 중앙 정렬 효과
     ) { page ->
         val isSelected = state.currentPage == page
         Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (format != null) String.format(
-                    format,
-                    items[page]
+                    format, items[page]
                 ) else items[page].toString(),
                 fontSize = if (isSelected) 22.sp else 18.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
@@ -2025,10 +1956,7 @@ fun <T> WheelPicker(
 
 @Composable
 fun WithUsButton(
-    text: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier
+    text: String, onClick: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier
 ) {
     Button(
         onClick = onClick,
@@ -2045,19 +1973,14 @@ fun WithUsButton(
         )
     ) {
         Text(
-            text = text,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
+            text = text, fontSize = 16.sp, fontWeight = FontWeight.Bold
         )
     }
 }
 
 @Composable
 fun KeywordChip(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    isAddButton: Boolean = false
+    text: String, isSelected: Boolean, onClick: () -> Unit, isAddButton: Boolean = false
 ) {
     Surface(
         modifier = Modifier
@@ -2080,8 +2003,7 @@ fun KeywordChip(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddKeywordBottomSheet(
-    onDismissRequest: () -> Unit,
-    onKeywordAdded: (String) -> Unit
+    onDismissRequest: () -> Unit, onKeywordAdded: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
     val isEnabled = text.isNotBlank()
@@ -2089,8 +2011,7 @@ fun AddKeywordBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         containerColor = Color.White,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.Black) }
-    ) {
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.Black) }) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2125,36 +2046,68 @@ fun AddKeywordBottomSheet(
 
             // 공통 버튼 사용
             WithUsButton(
-                text = "추가하기",
-                onClick = {
+                text = "추가하기", onClick = {
                     if (isEnabled) {
                         onKeywordAdded(text)
                         onDismissRequest()
                     }
-                },
-                enabled = isEnabled
+                }, enabled = isEnabled
             )
         }
     }
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@RequiresApi(Build.VERSION_CODES.O)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
     bottomBar: @Composable () -> Unit,
-    keywords: List<String>,        // ["오운완", "오늘의 하늘", "ootd"]
+    keywords: List<String>,
     notificationTime: String,
 ) {
-    // 사용자가 설정한 키워드 리스트 (예시: "오늘의 질문"은 고정, 나머지는 선택한 것들)
     val allTabs = listOf("오늘의 질문") + keywords
     var selectedTab by remember { mutableStateOf("오늘의 질문") }
+    val context = LocalContext.current
 
-    // 남은 시간 상태 (1분마다 갱신되도록 설정 가능)
-    val remainingTime = remember(notificationTime) {
-        calculateRemainingTime(notificationTime)
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        viewModel.userUploadedImage = uri
     }
+
+    val cameraPermissionState = rememberPermissionState(
+        permission = CAMERA
+    )
+
+    // 카메라/갤러리 런처 로직 (기존과 동일)
+    val tempImageUri = remember {
+        val file = File.createTempFile("profile_", ".jpg", context.externalCacheDir)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) viewModel.userUploadedImage = (tempImageUri)
+    }
+
+
+    var isTimePassed by remember(notificationTime) {
+        mutableStateOf(checkIsTimePassed(notificationTime))
+    }
+
+    // 2. 1분마다 시간을 체크하여 상태 업데이트
+    LaunchedEffect(notificationTime) {
+        while (true) {
+            isTimePassed = checkIsTimePassed(notificationTime)
+            delay(60000)
+        }
+    }
+    // 사진 업로드 여부
+    val isUserUploaded = viewModel.userUploadedImage != null
+    val isPartnerUploaded = viewModel.partnerUploadedImage != null
 
     Scaffold(
         topBar = {
@@ -2170,9 +2123,7 @@ fun HomeScreen(
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
-        },
-        bottomBar = bottomBar,
-        containerColor = Color.White
+        }, bottomBar = bottomBar, containerColor = Color.White
     ) { padding ->
         Column(
             modifier = Modifier
@@ -2188,49 +2139,230 @@ fun HomeScreen(
                     KeywordTabChip(
                         text = keyword,
                         isSelected = selectedTab == keyword,
-                        onClick = { selectedTab = keyword }
-                    )
+                        onClick = { selectedTab = keyword })
                 }
             }
 
             Spacer(modifier = Modifier.height(60.dp))
 
-            // 2. 남은 시간 표시 영역
+            // 2. 메인 컨텐츠 영역 (상태에 따라 분기)
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "오늘의 랜덤 질문이",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "$remainingTime 에 도착해요!",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black // "2시간 30분 후" 강조
-                )
+                if (selectedTab == "오늘의 질문") {
+                    if (!isTimePassed) {
+                        // 시간 전: 남은 시간 표시
+                        Text("오늘의 랜덤 질문이", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "${calculateRemainingTime(notificationTime)} 에 도착해요!",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        // 시간 후: 질문 표시
+                        Text("Q.", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            "상대가 가장 사랑스러워 보였던\n순간은 언제인가요?",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    // 다른 키워드 탭 선택 시
+                    Text("오늘의\n‘$selectedTab’ 사진은?", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                }
 
                 Spacer(modifier = Modifier.height(48.dp))
 
-                // 3. 중앙 비어있는 프로필/컨텐츠 영역
-                Box(
-                    modifier = Modifier
-                        .size(220.dp)
-                        .clip(RoundedCornerShape(32.dp))
-                        .background(Color(0xFFF0F0F0))
-                )
+                // 3. 중앙 이미지 영역 및 버튼
+                if (isUserUploaded || isPartnerUploaded) {
+                    // 본인 혹은 상대방 중 한 명이라도 올렸다면 카드 표시
+                    UploadedContentCard(
+                        userImageUri = viewModel.userUploadedImage,
+                        partnerImageUri = viewModel.partnerUploadedImage,
+                        userComment = "국밥 먹는중이지롱 ! 오빠는 점심 뭐먹어 ? ?",
+                        partnerComment = "나는 햄버거 먹는 중!! 보고싶다 !! 점심도 화이팅 해 ❤️",
+                        isUserUploaded = isUserUploaded,
+                        isPartnerUploaded = isPartnerUploaded,
+                        onUploadClick = { galleryLauncher.launch("image/*") } // "앨범으로 이동" 클릭 시
+                    )
+                } else {
+                    // 사진 미업로드 시 (기본 회색 박스 + 버튼)
+                    Box(
+                        modifier = Modifier
+                            .size(220.dp)
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(Color(0xFFF0F0F0))
+                    )
+
+                    if (isTimePassed || selectedTab != "오늘의 질문") {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = if (selectedTab == "오늘의 질문") "질문에 대한 나의 마음을\n사진으로 표현해주세요"
+                            else "사진을 기다리고 있다고\n상대방에게 알림을 보내보세요!",
+                            fontSize = 16.sp,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // 하단 검정 버튼
+                        Button(
+                            onClick = {
+                                if (selectedTab != "오늘의 질문") {
+                                    // 권한 체크 후 분기 처리
+                                    when {
+                                        cameraPermissionState.status.isGranted -> {
+                                            // 권한이 이미 있음: 카메라 바로 실행
+                                            cameraLauncher.launch(tempImageUri)
+                                        }
+
+                                        cameraPermissionState.status.shouldShowRationale -> {
+                                            // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
+                                            // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
+                                            cameraPermissionState.launchPermissionRequest()
+                                        }
+
+                                        else -> {
+                                            // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
+                                            cameraPermissionState.launchPermissionRequest()
+                                        }
+                                    }
+                                } else {
+                                    galleryLauncher.launch("image/*")
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(50.dp)
+                        ) {
+                            val btnText = if (isUserUploaded) "콕 찌르기" else if (selectedTab == "오늘의 질문") "앨범으로 이동하기" else "사진 촬영하기"
+                            Text("$btnText →", color = Color.White)
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
+fun UploadedContentCard(
+    userImageUri: Uri?,
+    partnerImageUri: Uri?,
+    userComment: String,
+    partnerComment: String,
+    isUserUploaded: Boolean,
+    isPartnerUploaded: Boolean,
+    onUploadClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        when {
+            // 1. 둘 다 업로드했을 때: 2분할 레이아웃
+            isUserUploaded && isPartnerUploaded -> {
+                Box(modifier = Modifier.fillMaxWidth().height(500.dp).clip(RoundedCornerShape(32.dp))) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ImageSection(partnerImageUri, "쏘피", "PM 12:30", partnerComment, true, Modifier.weight(1f))
+                        ImageSection(userImageUri, "jpg", "PM 12:30", userComment, true, Modifier.weight(1f))
+                    }
+                }
+            }
+
+            // 2. 나만 업로드했을 때: 내 사진 전체 + 상대 대기 문구
+            isUserUploaded && !isPartnerUploaded -> {
+                // 상단 대기 안내 영역
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(modifier = Modifier.size(80.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFFE0E0E0)))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("jpg님이 쏘피님의 사진을\n기다리고 있어요!", textAlign = TextAlign.Center, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { /* 콕 찌르기 등 */ },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("콕 찌르기 →", color = Color.White) }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // 내 사진 단독 표시
+                Box(modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(32.dp))) {
+                    ImageSection(userImageUri, "jpg", "PM 12:30", userComment, true, Modifier.fillMaxSize())
+                }
+            }
+
+            // 3. 상대만 업로드했을 때: 버튼 먼저 + 블러 처리된 상대 사진
+            !isUserUploaded && isPartnerUploaded -> {
+                Button(
+                    onClick = onUploadClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) { Text("앨범으로 이동하기 →", color = Color.White) }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // 블러 처리된 상대방 사진 영역
+                Box(modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(32.dp))) {
+                    // 실제 구현 시에는 이미지를 가져와서 Blur 처리를 해야 함
+                    ImageSection(partnerImageUri, "jpg", "1시간 전 응답", "", true, Modifier.fillMaxSize(), isBlurred = true)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImageSection(
+    imageUri: Uri?,
+    nickname: String,
+    time: String,
+    comment: String,
+    isUploaded: Boolean,
+    modifier: Modifier = Modifier,
+    isBlurred: Boolean = false // 블러 여부 추가
+) {
+    Box(modifier = modifier) {
+        AsyncImage(
+            model = imageUri,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize().then(
+                if (isBlurred) Modifier.blur(20.dp) else Modifier // 블러 효과 적용
+            ),
+            contentScale = ContentScale.Crop
+        )
+
+        // 오버레이 정보 (블러 상태가 아닐 때만 댓글 표시)
+        Column(modifier = Modifier.padding(16.dp).align(Alignment.TopStart)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.5f)))
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(nickname, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(time, color = Color.White.copy(0.8f), fontSize = 10.sp)
+                }
+            }
+        }
+
+        if (!isBlurred && comment.isNotEmpty()) {
+            Surface(
+                modifier = Modifier.padding(16.dp).align(Alignment.BottomStart),
+                color = Color.Black.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(comment, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp)
+            }
+        }
+    }
+}
+@Composable
 fun KeywordTabChip(
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
+    text: String, isSelected: Boolean, onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.clickable { onClick() },

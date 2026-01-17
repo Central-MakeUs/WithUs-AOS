@@ -12,6 +12,7 @@ import TestHomeScreen
 import InviteScreen
 import KeywordSelectionScreen
 import NotificationTimeScreen
+import PhotoFlowScreen
 import StepInputScreen
 import android.util.Log
 import android.widget.Toast
@@ -40,7 +41,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
     var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
 
     // start
-    NavHost(navController = navController, startDestination = "home") {
+    NavHost(navController = navController, startDestination = "photo_flow") {
         composable("onboarding") {
             OnboardingScreen(
                 viewModel = viewModel,
@@ -145,7 +146,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                         "마지막 설정이 남아있어요",
                 body = "랜덤 질문 알림 시간과 \n" +
                         "키워드 설정을 완료해주세요.",
-                buttonText = "설정하러 가기",
+                buttonText = "   설정하러 가기",
                 onConnectClick = { /* 설정 페이지 이동 로직 */ },
                 bottomBar = {
                     MainBottomNavigationBar(
@@ -219,6 +220,11 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                 notificationTime = "08:00 PM"
             )
         }
+
+        composable("photo_flow") {
+            PhotoFlowScreen()
+        }
+
 //        composable("home_test") {
 //            TestHomeScreen(
 //                nickname = viewModel.nickname,

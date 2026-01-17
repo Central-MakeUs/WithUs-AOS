@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.androidx.material3.android)
     implementation(libs.fragment.ktx)
     implementation(libs.androidx.ui)
+    implementation(libs.play.services.location)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -101,6 +102,12 @@ dependencies {
 
     implementation("com.kakao.sdk:v2-user:2.20.6")
     implementation("com.kakao.sdk:v2-share:2.20.6")
+
+    implementation("androidx.camera:camera-camera2:1.3.0")
+    implementation("androidx.camera:camera-lifecycle:1.3.0")
+    implementation("androidx.camera:camera-view:1.3.0")
+    implementation("io.coil-kt:coil-compose:2.4.0")
+
 
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler) // 코드 생성을 위한 컴파일러
