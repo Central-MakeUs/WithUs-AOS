@@ -41,7 +41,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
     var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
 
     // start
-    NavHost(navController = navController, startDestination = "photo_flow") {
+    NavHost(navController = navController, startDestination = "onboarding") {
         composable("onboarding") {
             OnboardingScreen(
                 viewModel = viewModel,
