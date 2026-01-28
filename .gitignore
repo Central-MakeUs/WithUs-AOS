@@ -5,7 +5,7 @@ build/
 # IntelliJ/Android Studio 관련 설정
 .idea/
 *.iml
-*.xml
+
 
 # 로컬 속성 및 로그
 local.properties

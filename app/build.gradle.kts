@@ -26,7 +26,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.withus.app"
+        applicationId = "com.withus.app3"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -74,11 +74,12 @@ dependencies {
     implementation(libs.fragment.ktx)
     implementation(libs.androidx.ui)
     implementation(libs.play.services.location)
+    implementation(libs.androidx.compose.foundation)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-
+    implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.activity.compose)

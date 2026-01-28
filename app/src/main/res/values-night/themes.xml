@@ -1,0 +1,47 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.Withus" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowTranslucentStatus" tools:targetApi="kitkat">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds" tools:targetApi="lollipop">true</item>
+        <item name="colorPrimary">@color/primary</item>
+
+        <item name="colorPrimaryDark">@color/primaryDark</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/white</item>
+
+        <!-- 메인 테마에서는 보통 상태바 색상을 앱의 브랜드 색상으로 설정합니다. -->
+        <item name="android:statusBarColor" tools:targetApi="l">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="Theme.App.Starting" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/white</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="s">@color/white
+        </item>
+
+        <!-- 상태바와 내비게이션바를 투명하게 설정 -->
+        <item name="android:statusBarColor" tools:targetApi="l">@android:color/transparent</item>
+        <item name="android:navigationBarColor" tools:targetApi="l">@android:color/transparent
+        </item>
+
+        <!-- 콘텐츠가 시스템 바 뒤로 그려지도록 허용 -->
+        <item name="android:windowDrawsSystemBarBackgrounds" tools:targetApi="l">true</item>
+
+        <!-- 상태바 아이콘 밝게 (상태바 배경이 어두울 경우 대비) -->
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+
+        <!-- 투명 상태바를 위한 레거시 속성 (API 19-20) -->
+        <item name="android:windowTranslucentStatus" tools:targetApi="kitkat">true</item>
+        <item name="android:windowTranslucentNavigation" tools:targetApi="kitkat">true</item>
+
+        <!-- Splash 후 메인 테마로 전환 -->
+        <item name="postSplashScreenTheme">@style/Theme.Withus</item>
+    </style>
+
+    <style name="AlertDialog.Rounded" parent="Theme.AppCompat.Light.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/rounded_dialog_background</item>
+    </style>
+
+</resources>

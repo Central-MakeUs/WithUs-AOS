@@ -79,6 +79,7 @@ import com.widthus.app.model.CalendarDay
 import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
 import com.widthus.app.screen.AppNavigation
+import com.widthus.app.screen.ImageMediaManager
 import com.widthus.app.utils.Utils.calculateRemainingTime
 import com.widthus.app.utils.Utils.checkIsTimePassed
 import com.widthus.app.viewmodel.MainViewModel
@@ -2063,36 +2064,13 @@ fun AddKeywordBottomSheet(
 @Composable
 fun HomeScreen(
     viewModel: MainViewModel,
-    bottomBar: @Composable () -> Unit,
+    mediaManager: ImageMediaManager,
     keywords: List<String>,
     notificationTime: String,
 ) {
     val allTabs = listOf("오늘의 질문") + keywords
     var selectedTab by remember { mutableStateOf("오늘의 질문") }
     val context = LocalContext.current
-
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        viewModel.userUploadedImage = uri
-    }
-
-    val cameraPermissionState = rememberPermissionState(
-        permission = CAMERA
-    )
-
-    // 카메라/갤러리 런처 로직 (기존과 동일)
-    val tempImageUri = remember {
-        val file = File.createTempFile("profile_", ".jpg", context.externalCacheDir)
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    }
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) viewModel.userUploadedImage = (tempImageUri)
-    }
-
 
     var isTimePassed by remember(notificationTime) {
         mutableStateOf(checkIsTimePassed(notificationTime))
@@ -2109,141 +2087,129 @@ fun HomeScreen(
     val isUserUploaded = viewModel.userUploadedImage != null
     val isPartnerUploaded = viewModel.partnerUploadedImage != null
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("WITHUS", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp) },
-                actions = {
-                    IconButton(onClick = { /* 알림 이동 */ }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_bell),
-                            contentDescription = null
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
-            )
-        }, bottomBar = bottomBar, containerColor = Color.White
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // 상단 앱바 (필요 시 유지 혹은 MainScreen으로 이동)
+        CenterAlignedTopAppBar(
+            title = { Text("WITHUS", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp) },
+            actions = {
+                IconButton(onClick = { /* 알림 이동 */ }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_bell),
+                        contentDescription = null
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
+        )
+
+        // 1. 상단 키워드 탭 리스트
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 1. 상단 키워드 탭 리스트
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(allTabs) { keyword ->
-                    KeywordTabChip(
-                        text = keyword,
-                        isSelected = selectedTab == keyword,
-                        onClick = { selectedTab = keyword })
+            items(allTabs) { keyword ->
+                KeywordTabChip(
+                    text = keyword,
+                    isSelected = selectedTab == keyword,
+                    onClick = { selectedTab = keyword })
+            }
+        }
+
+        Spacer(modifier = Modifier.height(60.dp))
+
+        // 2. 메인 컨텐츠 영역 (상태에 따라 분기)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (selectedTab == "오늘의 질문") {
+                if (!isTimePassed) {
+                    // 시간 전: 남은 시간 표시
+                    Text("오늘의 랜덤 질문이", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${calculateRemainingTime(notificationTime)} 에 도착해요!",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    // 시간 후: 질문 표시
+                    Text("Q.", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        "상대가 가장 사랑스러워 보였던\n순간은 언제인가요?",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
                 }
+            } else {
+                // 다른 키워드 탭 선택 시
+                Text("오늘의\n‘$selectedTab’ 사진은?", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }
 
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(48.dp))
 
-            // 2. 메인 컨텐츠 영역 (상태에 따라 분기)
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (selectedTab == "오늘의 질문") {
-                    if (!isTimePassed) {
-                        // 시간 전: 남은 시간 표시
-                        Text("오늘의 랜덤 질문이", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            "${calculateRemainingTime(notificationTime)} 에 도착해요!",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else {
-                        // 시간 후: 질문 표시
-                        Text("Q.", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                        Text(
-                            "상대가 가장 사랑스러워 보였던\n순간은 언제인가요?",
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                } else {
-                    // 다른 키워드 탭 선택 시
-                    Text("오늘의\n‘$selectedTab’ 사진은?", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(modifier = Modifier.height(48.dp))
-
-                // 3. 중앙 이미지 영역 및 버튼
-                if (isUserUploaded || isPartnerUploaded) {
-                    // 본인 혹은 상대방 중 한 명이라도 올렸다면 카드 표시
-                    UploadedContentCard(
-                        userImageUri = viewModel.userUploadedImage,
-                        partnerImageUri = viewModel.partnerUploadedImage,
-                        userComment = "국밥 먹는중이지롱 ! 오빠는 점심 뭐먹어 ? ?",
-                        partnerComment = "나는 햄버거 먹는 중!! 보고싶다 !! 점심도 화이팅 해 ❤️",
-                        isUserUploaded = isUserUploaded,
-                        isPartnerUploaded = isPartnerUploaded,
-                        onUploadClick = { galleryLauncher.launch("image/*") } // "앨범으로 이동" 클릭 시
-                    )
-                } else {
-                    // 사진 미업로드 시 (기본 회색 박스 + 버튼)
-                    Box(
-                        modifier = Modifier
-                            .size(220.dp)
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(Color(0xFFF0F0F0))
-                    )
-
-                    if (isTimePassed || selectedTab != "오늘의 질문") {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            text = if (selectedTab == "오늘의 질문") "질문에 대한 나의 마음을\n사진으로 표현해주세요"
-                            else "사진을 기다리고 있다고\n상대방에게 알림을 보내보세요!",
-                            fontSize = 16.sp,
-                            color = Color.Gray,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        // 하단 검정 버튼
-                        Button(
-                            onClick = {
-                                if (selectedTab != "오늘의 질문") {
-                                    // 권한 체크 후 분기 처리
-                                    when {
-                                        cameraPermissionState.status.isGranted -> {
-                                            // 권한이 이미 있음: 카메라 바로 실행
-                                            cameraLauncher.launch(tempImageUri)
-                                        }
-
-                                        cameraPermissionState.status.shouldShowRationale -> {
-                                            // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
-                                            // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
-                                            cameraPermissionState.launchPermissionRequest()
-                                        }
-
-                                        else -> {
-                                            // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
-                                            cameraPermissionState.launchPermissionRequest()
-                                        }
-                                    }
-                                } else {
-                                    galleryLauncher.launch("image/*")
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.height(50.dp)
-                        ) {
-                            val btnText = if (isUserUploaded) "콕 찌르기" else if (selectedTab == "오늘의 질문") "앨범으로 이동하기" else "사진 촬영하기"
-                            Text("$btnText →", color = Color.White)
+            // 3. 중앙 이미지 영역 및 버튼
+            if (isUserUploaded || isPartnerUploaded) {
+                // 본인 혹은 상대방 중 한 명이라도 올렸다면 카드 표시
+                UploadedContentCard(
+                    userImageUri = viewModel.userUploadedImage,
+                    partnerImageUri = viewModel.partnerUploadedImage,
+                    userComment = "국밥 먹는중이지롱 ! 오빠는 점심 뭐먹어 ? ?",
+                    partnerComment = "나는 햄버거 먹는 중!! 보고싶다 !! 점심도 화이팅 해 ❤️",
+                    isUserUploaded = isUserUploaded,
+                    isPartnerUploaded = isPartnerUploaded,
+                    onUploadClick = {
+                        mediaManager.launchGallery { uri ->
+                            viewModel.userUploadedImage = uri
                         }
+                    } // "앨범으로 이동" 클릭 시
+                )
+            } else {
+                // 사진 미업로드 시 (기본 회색 박스 + 버튼)
+                Box(
+                    modifier = Modifier
+                        .size(220.dp)
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(Color(0xFFF0F0F0))
+                )
+
+                if (isTimePassed || selectedTab != "오늘의 질문") {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = if (selectedTab == "오늘의 질문") "질문에 대한 나의 마음을\n사진으로 표현해주세요"
+                        else "사진을 기다리고 있다고\n상대방에게 알림을 보내보세요!",
+                        fontSize = 16.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // 하단 검정 버튼
+                    Button(
+                        onClick = {
+                            if (selectedTab != "오늘의 질문") {
+                                mediaManager.launchCamera { uri ->
+                                    viewModel.userUploadedImage = uri
+                                }
+                            } else {
+                                mediaManager.launchGallery { uri ->
+                                    viewModel.userUploadedImage = uri
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(50.dp)
+                    ) {
+                        val btnText =
+                            if (isUserUploaded) "콕 찌르기" else if (selectedTab == "오늘의 질문") "앨범으로 이동하기" else "사진 촬영하기"
+                        Text("$btnText →", color = Color.White)
                     }
                 }
             }
+
         }
     }
 }
