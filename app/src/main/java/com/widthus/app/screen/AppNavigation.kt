@@ -77,8 +77,8 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
     NavHost(
         navController = navController,
 //        startDestination = Screen.Onboarding.route
-//        startDestination = Screen.Home.route
-        startDestination = Screen.Gallery.route
+        startDestination = Screen.Home.route
+//        startDestination = Screen.Gallery.route
 //        startDestination = Screen.PhotoFlow.route
     ) {
         composable(Screen.Onboarding.route) {
@@ -312,8 +312,8 @@ fun MainScreen(viewModel: MainViewModel) {
                         Text("추억 화면 준비중", modifier = Modifier.align(Alignment.Center))
                     }
                     BottomNavItem.My.route -> {
-                        Text("마이페이지 준비중", modifier = Modifier.align(Alignment.Center))
-                    }
+                        MyScreenEntry()
+                     }
                 }
             }
         }
