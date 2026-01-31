@@ -8,38 +8,40 @@ import OnboardingConnectScreen
 import DayUsScreen
 import EnterCodeScreen
 import HomeScreen
-import TestHomeScreen
 import InviteScreen
 import KeywordSelectionScreen
 import NotificationTimeScreen
 import PhotoFlowScreen
 import StepInputScreen
-import android.content.ContentValues
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Picture
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kakao.sdk.common.util.Utility
 import com.kakao.sdk.user.UserApiClient
 import com.widthus.app.viewmodel.MainViewModel
+import com.withus.app.R
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -65,6 +67,7 @@ sealed class Screen(val route: String) {
 // ==========================================
 // 2. Navigation
 // ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
     val navController = rememberNavController()
@@ -91,7 +94,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
         }
 
         composable(Screen.Gallery.route) {
-            MemoryScreen()
+            GalleryScreen()
         }
 
         composable(Screen.Login.route) {
@@ -135,7 +138,28 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                 viewModel = viewModel,
                 onInviteClick = { navController.navigate(Screen.Invite.route) },
                 onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
-                onCloseClick = { navController.navigate(Screen.ConnectionPending.route) }
+                onCloseClick = { navController.navigate(Screen.ConnectionPending.route) },
+                topBar = {
+                    // 상단 바 영역
+                    TopAppBar(
+                        title = { }, // 제목은 비워둠
+                        actions = {
+                            // 오른쪽 버튼들 (actions)
+                            IconButton(onClick = {
+                                navController.navigate(Screen.ConnectionPending.route)
+                            }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_close),
+                                    contentDescription = "닫기",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }, colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.White
+                        )
+                    )
+                }
             )
         }
 
@@ -157,6 +181,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                 onBackClick = {},
                 onFinish = { timeString ->
                     Log.d("SETTING", "선택된 시간: $timeString")
+                    viewModel.completeOnboarding()
                 }
             )
         }
@@ -198,10 +223,13 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 
         composable(Screen.KeywordSelect.route) {
             KeywordSelectionScreen(
-                onBackClick = {},
+                onBackClick = {
+                    navController.popBackStack()
+                },
                 onNextClick = { strings ->
                     Log.d("TAG", "selected items : $strings")
-                }
+                },
+                isMyPage = viewModel.isOnboardingComplete
             )
         }
 
@@ -211,7 +239,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                     if (viewModel.nickname.isNotEmpty()) {
                         navController.navigate(Screen.OnboardingConnect.route)
                     }
-                }
+                },
             )
         }
 
@@ -229,7 +257,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
         }
 
         composable(Screen.Home.route) {
-            MainScreen(viewModel)
+            MainScreen(viewModel, navController)
         }
 
         composable(Screen.PhotoFlow.route) {
@@ -254,7 +282,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun MainScreen(viewModel: MainViewModel) {
+fun MainScreen(viewModel: MainViewModel, navController: NavHostController) {
     // 1. 네비게이션 상태
     var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
 
@@ -298,7 +326,7 @@ fun MainScreen(viewModel: MainViewModel) {
                             notificationTime = "18:00"
                         )
                     }
-                    BottomNavItem.FourCut.route -> {
+                    BottomNavItem.Memory.route -> {
                         // 새로 만든 갤러리 화면 연결
                         FourCutGalleryScreen(
                              savedImages = savedFourCuts,
@@ -308,11 +336,16 @@ fun MainScreen(viewModel: MainViewModel) {
                             }
                         )
                     }
-                    BottomNavItem.Memory.route -> {
-                        Text("추억 화면 준비중", modifier = Modifier.align(Alignment.Center))
+                    BottomNavItem.Gallery.route -> {
+                        GalleryScreen()
                     }
                     BottomNavItem.My.route -> {
-                        MyScreenEntry()
+                        MyScreenEntry(
+                            mediaManager = mediaManager,
+                            onNavigateToEditKeyword = {
+                                navController.navigate(Screen.KeywordSelect.route)
+                            }
+                        )
                      }
                 }
             }

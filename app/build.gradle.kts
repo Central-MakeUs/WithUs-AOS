@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.androidx.ui)
     implementation(libs.play.services.location)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.ui)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -115,4 +116,6 @@ dependencies {
     kapt(libs.hilt.compiler) // 코드 생성을 위한 컴파일러
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.accompanist.permissions)
+
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
 }

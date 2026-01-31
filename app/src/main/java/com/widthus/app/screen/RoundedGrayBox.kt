@@ -21,6 +21,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -38,9 +39,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.*
@@ -79,7 +82,10 @@ import com.widthus.app.model.CalendarDay
 import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
 import com.widthus.app.screen.AppNavigation
+import com.widthus.app.screen.BackButton
+import com.widthus.app.screen.EditMode
 import com.widthus.app.screen.ImageMediaManager
+import com.widthus.app.screen.Screen
 import com.widthus.app.utils.Utils.calculateRemainingTime
 import com.widthus.app.utils.Utils.checkIsTimePassed
 import com.widthus.app.viewmodel.MainViewModel
@@ -98,17 +104,17 @@ fun TestHomeScreen(
 ) {
     Scaffold(
         topBar = { TopTitleBar("LOGO") }, bottomBar = {
-        Column {
-            Button(
-                onClick = onNavigateToCalendar,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
-            ) { Text("다음 화면 (캘린더) 보기") }
-            AppBottomNavigation()
-        }
-    }, containerColor = Color.White
+            Column {
+                Button(
+                    onClick = onNavigateToCalendar,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                ) { Text("다음 화면 (캘린더) 보기") }
+                AppBottomNavigation()
+            }
+        }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -171,17 +177,17 @@ fun CalendarHomeScreen(
 
     Scaffold(
         topBar = { TopTitleBar("LOGO") }, bottomBar = {
-        Column {
-            Button(
-                onClick = onNavigateToDayUs,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-            ) { Text("다음 화면 (DAYUS) 보기") }
-            AppBottomNavigation()
-        }
-    }, containerColor = Color.White
+            Column {
+                Button(
+                    onClick = onNavigateToDayUs,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                ) { Text("다음 화면 (DAYUS) 보기") }
+                AppBottomNavigation()
+            }
+        }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -523,20 +529,20 @@ fun TestHomeScreen(
 ) {
     Scaffold(
         topBar = { TopTitleBar("LOGO") }, bottomBar = {
-        // 데모용: 네비게이션 바 대신 다음 화면 버튼 포함
-        Column {
-            Button(
-                onClick = onNavigateToCalendar,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
-            ) {
-                Text("다음 화면 (캘린더) 보기")
+            // 데모용: 네비게이션 바 대신 다음 화면 버튼 포함
+            Column {
+                Button(
+                    onClick = onNavigateToCalendar,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                ) {
+                    Text("다음 화면 (캘린더) 보기")
+                }
+                AppBottomNavigation()
             }
-            AppBottomNavigation()
-        }
-    }, containerColor = Color.White
+        }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -595,19 +601,19 @@ fun CalendarHomeScreen(
 ) {
     Scaffold(
         topBar = { TopTitleBar("LOGO") }, bottomBar = {
-        Column {
-            Button(
-                onClick = onNavigateToDayUs,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-            ) {
-                Text("다음 화면 (DAYUS) 보기")
+            Column {
+                Button(
+                    onClick = onNavigateToDayUs,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                ) {
+                    Text("다음 화면 (DAYUS) 보기")
+                }
+                AppBottomNavigation()
             }
-            AppBottomNavigation()
-        }
-    }, containerColor = Color.White
+        }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -643,48 +649,48 @@ fun CalendarHomeScreen(
 fun DayUsScreen() {
     Scaffold(
         topBar = {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = "DAYUS", fontSize = 20.sp, fontWeight = FontWeight.Black)
-            Icon(imageVector = Icons.Default.DateRange, contentDescription = "Calendar")
-        }
-    }, bottomBar = {
-        // 커스텀 하단 바 (FAB가 중앙에 있는 형태)
-        BottomAppBar(containerColor = Color.White, tonalElevation = 10.dp, actions = {
-            IconButton(onClick = {}) {
-                Icon(
-                    Icons.Outlined.GridView, contentDescription = "Menu"
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f)) // 중앙 공간 확보
-            IconButton(onClick = {}) {
-                Icon(
-                    Icons.Default.Person, contentDescription = "Profile", tint = Color.LightGray
-                )
-            }
-        }, floatingActionButton = {
-            FloatingActionButton(
-                onClick = {},
-                containerColor = Color(0xFF1C1C1E), // 검은색에 가까운 다크그레이
-                contentColor = Color.White,
-                shape = CircleShape,
+            Row(
                 modifier = Modifier
-                    .size(64.dp)
-                    .offset(y = (-10).dp) // 살짝 위로 올림
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Add",
-                    modifier = Modifier.size(32.dp)
-                )
+                Text(text = "DAYUS", fontSize = 20.sp, fontWeight = FontWeight.Black)
+                Icon(imageVector = Icons.Default.DateRange, contentDescription = "Calendar")
             }
-        })
-    }, containerColor = Color.White
+        }, bottomBar = {
+            // 커스텀 하단 바 (FAB가 중앙에 있는 형태)
+            BottomAppBar(containerColor = Color.White, tonalElevation = 10.dp, actions = {
+                IconButton(onClick = {}) {
+                    Icon(
+                        Icons.Outlined.GridView, contentDescription = "Menu"
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f)) // 중앙 공간 확보
+                IconButton(onClick = {}) {
+                    Icon(
+                        Icons.Default.Person, contentDescription = "Profile", tint = Color.LightGray
+                    )
+                }
+            }, floatingActionButton = {
+                FloatingActionButton(
+                    onClick = {},
+                    containerColor = Color(0xFF1C1C1E), // 검은색에 가까운 다크그레이
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .offset(y = (-10).dp) // 살짝 위로 올림
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            })
+        }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -1072,28 +1078,13 @@ fun OnboardingConnectScreen(
     viewModel: MainViewModel,
     onInviteClick: () -> Unit,
     onEnterCodeClick: () -> Unit,
-    onCloseClick: () -> Unit
+    onCloseClick: () -> Unit,
+    topBar: @Composable () -> Unit,
+    title: String = "${viewModel.nickname}님, 가입을 축하드려요!",
 ) {
     Scaffold(
-        containerColor = Color.White, topBar = {
-            // 상단 바 영역
-            TopAppBar(
-                title = { }, // 제목은 비워둠
-                actions = {
-                    // 오른쪽 버튼들 (actions)
-                    IconButton(onClick = onCloseClick) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_close),
-                            contentDescription = "닫기",
-                            tint = Color.Black,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }, colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
-                )
-            )
-        }) { paddingValues ->
+        containerColor = Color.White, topBar = topBar
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues) // 상단 바 영역만큼 띄워줌
@@ -1102,7 +1093,7 @@ fun OnboardingConnectScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("${viewModel.nickname}님, 가입을 축하드려요!", fontSize = 18.sp)
+            Text(title, fontSize = 18.sp)
             Text(
                 "상대방을 연결하고\n둘만의 추억을 쌓아가요",
                 fontSize = 24.sp,
@@ -1772,10 +1763,10 @@ fun isValidDate(dateString: String): Boolean {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun KeywordSelectionScreen(
-    onBackClick: () -> Unit, onNextClick: (Set<String>) -> Unit
+    onBackClick: () -> Unit, onNextClick: (Set<String>) -> Unit, isMyPage: Boolean = false
 ) {
     // 기본 키워드 리스트 (가변 리스트로 선언하여 추가 가능하게 함)
     var keywordList by remember {
@@ -1785,17 +1776,44 @@ fun KeywordSelectionScreen(
     var showAddSheet by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Color.White, topBar = { /* 뒤로가기 버튼 로직 동일 */ }) { paddingValues ->
+        containerColor = Color.White, topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+
+                },
+                navigationIcon = { BackButton(onBackClick) },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
+                actions = {
+
+                }
+            )
+
+        }) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                .padding(top = 54.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // (상단 타이틀 및 설명 부분 동일...)
 
-            Spacer(modifier = Modifier.height(60.dp))
+            Text(
+                "연인과 자주 사진을 주고받는\n" +
+                        "일상 키워드를 골라 주세요", fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                "새로운 키워드를 이후에 추가할 수 있어요",
+                fontSize = 18.sp,
+                )
+
+            Spacer(modifier = Modifier.height(70.dp))
 
             FlowRow(
                 modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
@@ -1823,7 +1841,7 @@ fun KeywordSelectionScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             WithUsButton(
-                text = "다음",
+                text = if (isMyPage) "수정하기" else "다음",
                 enabled = selectedKeywords.isNotEmpty(),
                 onClick = { onNextClick(selectedKeywords) },
                 modifier = Modifier.padding(bottom = 24.dp)
@@ -2225,16 +2243,37 @@ fun UploadedContentCard(
     onUploadClick: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         when {
             // 1. 둘 다 업로드했을 때: 2분할 레이아웃
             isUserUploaded && isPartnerUploaded -> {
-                Box(modifier = Modifier.fillMaxWidth().height(500.dp).clip(RoundedCornerShape(32.dp))) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(500.dp)
+                        .clip(RoundedCornerShape(32.dp))
+                ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        ImageSection(partnerImageUri, "쏘피", "PM 12:30", partnerComment, true, Modifier.weight(1f))
-                        ImageSection(userImageUri, "jpg", "PM 12:30", userComment, true, Modifier.weight(1f))
+                        ImageSection(
+                            partnerImageUri,
+                            "쏘피",
+                            "PM 12:30",
+                            partnerComment,
+                            true,
+                            Modifier.weight(1f)
+                        )
+                        ImageSection(
+                            userImageUri,
+                            "jpg",
+                            "PM 12:30",
+                            userComment,
+                            true,
+                            Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -2243,9 +2282,19 @@ fun UploadedContentCard(
             isUserUploaded && !isPartnerUploaded -> {
                 // 상단 대기 안내 영역
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(modifier = Modifier.size(80.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFFE0E0E0)))
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFFE0E0E0))
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("jpg님이 쏘피님의 사진을\n기다리고 있어요!", textAlign = TextAlign.Center, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        "jpg님이 쏘피님의 사진을\n기다리고 있어요!",
+                        textAlign = TextAlign.Center,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = { /* 콕 찌르기 등 */ },
@@ -2257,8 +2306,20 @@ fun UploadedContentCard(
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // 내 사진 단독 표시
-                Box(modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(32.dp))) {
-                    ImageSection(userImageUri, "jpg", "PM 12:30", userComment, true, Modifier.fillMaxSize())
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .clip(RoundedCornerShape(32.dp))
+                ) {
+                    ImageSection(
+                        userImageUri,
+                        "jpg",
+                        "PM 12:30",
+                        userComment,
+                        true,
+                        Modifier.fillMaxSize()
+                    )
                 }
             }
 
@@ -2268,15 +2329,30 @@ fun UploadedContentCard(
                     onClick = onUploadClick,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
                 ) { Text("앨범으로 이동하기 →", color = Color.White) }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // 블러 처리된 상대방 사진 영역
-                Box(modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(32.dp))) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .clip(RoundedCornerShape(32.dp))
+                ) {
                     // 실제 구현 시에는 이미지를 가져와서 Blur 처리를 해야 함
-                    ImageSection(partnerImageUri, "jpg", "1시간 전 응답", "", true, Modifier.fillMaxSize(), isBlurred = true)
+                    ImageSection(
+                        partnerImageUri,
+                        "jpg",
+                        "1시간 전 응답",
+                        "",
+                        true,
+                        Modifier.fillMaxSize(),
+                        isBlurred = true
+                    )
                 }
             }
         }
@@ -2297,19 +2373,33 @@ fun ImageSection(
         AsyncImage(
             model = imageUri,
             contentDescription = null,
-            modifier = Modifier.fillMaxSize().then(
-                if (isBlurred) Modifier.blur(20.dp) else Modifier // 블러 효과 적용
-            ),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (isBlurred) Modifier.blur(20.dp) else Modifier // 블러 효과 적용
+                ),
             contentScale = ContentScale.Crop
         )
 
         // 오버레이 정보 (블러 상태가 아닐 때만 댓글 표시)
-        Column(modifier = Modifier.padding(16.dp).align(Alignment.TopStart)) {
+        Column(modifier = Modifier
+            .padding(16.dp)
+            .align(Alignment.TopStart)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(0.5f)))
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(0.5f))
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text(nickname, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        nickname,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                     Text(time, color = Color.White.copy(0.8f), fontSize = 10.sp)
                 }
             }
@@ -2317,15 +2407,23 @@ fun ImageSection(
 
         if (!isBlurred && comment.isNotEmpty()) {
             Surface(
-                modifier = Modifier.padding(16.dp).align(Alignment.BottomStart),
+                modifier = Modifier
+                    .padding(16.dp)
+                    .align(Alignment.BottomStart),
                 color = Color.Black.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text(comment, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp)
+                Text(
+                    comment,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    fontSize = 12.sp
+                )
             }
         }
     }
 }
+
 @Composable
 fun KeywordTabChip(
     text: String, isSelected: Boolean, onClick: () -> Unit
@@ -2343,6 +2441,135 @@ fun KeywordTabChip(
             fontWeight = FontWeight.Medium,
             color = if (isSelected) Color.White else Color.Black
         )
+    }
+}
+
+@Composable
+fun ProfileImagePicker(
+    imageUri: Uri?,
+    onImageClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(160.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null // 클릭 효과 제거 (이미지 내부에서 처리)
+            ) { onImageClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        // 1. 메인 프로필 원형 박스
+        Box(
+            modifier = Modifier
+                .size(150.dp)
+                .background(Color(0xFFD9D9D9), CircleShape)
+                .clip(CircleShape)
+                .border(1.dp, Color(0xFFF0F0F0), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (imageUri != null) {
+                // 이미지가 있을 때: 사진 표시
+                AsyncImage(
+                    model = imageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                // 이미지가 없을 때: 기본 격자 아이콘 표시
+                Icon(
+                    painter = painterResource(id = R.drawable.photo_grid),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(100.dp)
+                )
+            }
+        }
+
+        // 2. 우측 하단 카메라 추가 버튼 (이미지가 없을 때만 표시)
+        if (imageUri == null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 10.dp, end = 10.dp)
+                    .size(44.dp)
+                    .shadow(4.dp, CircleShape)
+                    .background(Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.photo_add),
+                    contentDescription = "사진 추가",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        } else {
+            // 이미지가 있을 때 편집 모드라면 작은 카메라 아이콘 표시 (선택 사항)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 10.dp, end = 10.dp)
+                    .size(32.dp)
+                    .background(Color.White, CircleShape)
+                    .border(1.dp, Color(0xFFEEEEEE), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = "사진 변경",
+                    modifier = Modifier.size(18.dp),
+                    tint = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@Composable
+fun ProfileImageBottomSheet(
+    showSheet: Boolean,
+    onDismiss: () -> Unit,
+    onCameraClick: () -> Unit,
+    onGalleryClick: () -> Unit
+) {
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            containerColor = Color.White,
+            dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFFE0E0E0)) }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 40.dp, start = 20.dp, end = 20.dp)
+            ) {
+                Text(
+                    "프로필 사진 설정",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                ListItem(
+                    headlineContent = { Text("사진 촬영") },
+                    leadingContent = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
+                    modifier = Modifier.clickable { onCameraClick() }
+                )
+
+                ListItem(
+                    headlineContent = { Text("앨범에서 가져오기") },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.PhotoLibrary,
+                            contentDescription = null
+                        )
+                    },
+                    modifier = Modifier.clickable { onGalleryClick() }
+                )
+            }
+        }
     }
 }
 

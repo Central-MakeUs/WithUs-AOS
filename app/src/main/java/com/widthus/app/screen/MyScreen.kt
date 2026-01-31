@@ -1,5 +1,8 @@
 package com.widthus.app.screen
 
+import OnboardingConnectScreen
+import ProfileImageBottomSheet
+import ProfileImagePicker
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,10 +11,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,13 +23,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.widthus.app.viewmodel.MainViewModel
 
 // --- 라우트 정의 ---
 sealed class MyRoute(val route: String) {
@@ -34,10 +44,19 @@ sealed class MyRoute(val route: String) {
     object DeleteWarning : MyRoute("delete_warning")
     object DeleteReason : MyRoute("delete_reason")
     object Disconnect : MyRoute("disconnect")
+    object ProfileEdit : MyRoute("profile_edit")
+    object PartnerInfo : MyRoute("partner_info")
 }
 
+enum class EditMode { ME, PARTNER }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyScreenEntry() {
+fun MyScreenEntry(
+    viewModel: MainViewModel = hiltViewModel(),
+    onNavigateToEditKeyword: () -> Unit,
+    mediaManager: ImageMediaManager
+) {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = MyRoute.Main.route) {
@@ -45,7 +64,12 @@ fun MyScreenEntry() {
         composable(MyRoute.Main.route) {
             MyMainScreen(
                 onNavigateToAccount = { navController.navigate(MyRoute.Account.route) },
-                onNavigateToDisconnect = { navController.navigate(MyRoute.Disconnect.route) }
+                onNavigateToConnectInfo = { navController.navigate(MyRoute.PartnerInfo.route) },
+                mediaManager = mediaManager,
+                onEditProfile = {
+                    navController.navigate(MyRoute.ProfileEdit.route )
+                },
+                onNavigateToEditKeyword = onNavigateToEditKeyword
             )
         }
         // 2. 계정 관리 화면
@@ -57,6 +81,18 @@ fun MyScreenEntry() {
         }
         // 3. 회원 탈퇴 (경고)
         composable(MyRoute.DeleteWarning.route) {
+            if (viewModel.deleteStep == 1) {
+                DeleteAccountWarningScreen(
+                    onBack = { navController.popBackStack() },
+                    onNext = { viewModel.updateDeleteStep(2) } // 단계 업데이트
+                )
+            } else {
+                DeleteAccountReasonScreen(
+                    onBack = { viewModel.updateDeleteStep(1) }, // 이전 단계로
+                    onConfirmDelete = { /* 최종 탈퇴 */ }
+                )
+            }
+
             DeleteAccountWarningScreen(
                 onBack = { navController.popBackStack() },
                 onNext = { navController.navigate(MyRoute.DeleteReason.route) }
@@ -78,6 +114,54 @@ fun MyScreenEntry() {
                 onConfirmDisconnect = { /* 연결 해제 로직 */ }
             )
         }
+
+// 1. 내 프로필 편집
+        composable(MyRoute.ProfileEdit.route) {
+            ProfileEditScreen(
+                viewModel = viewModel,
+                mode = EditMode.ME,
+                onBack = { navController.popBackStack() },
+                mediaManager = mediaManager,
+                onNavigateToDisconnect = {
+
+                }
+            )
+        }
+
+// 2. 커플 연결 정보 (파트너 정보)
+        composable(MyRoute.PartnerInfo.route) {
+            if (viewModel.isConnect) {
+                ProfileEditScreen(
+                    viewModel = viewModel,
+                    mode = EditMode.PARTNER,
+                    onBack = { navController.popBackStack() },
+                    mediaManager = mediaManager,
+                    onNavigateToDisconnect = {
+                        navController.navigate(MyRoute.Disconnect.route )
+                    }
+                )
+            } else {
+                OnboardingConnectScreen(
+                    viewModel = viewModel,
+                    onInviteClick = { navController.navigate(Screen.Invite.route) },
+                    onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
+                    onCloseClick = { navController.navigate(Screen.ConnectionPending.route) },
+                    topBar = {
+                        CenterAlignedTopAppBar(
+                            title = { Text("커플 연결 정보", fontWeight = FontWeight.Bold) },
+                            navigationIcon = { BackButton({
+                                navController.popBackStack()
+                            }) },
+                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
+                            actions = {
+
+                            }
+                        )
+                    },
+                    title = "아직 연결된 상대방이 없어요!"
+                )
+            }
+        }
     }
 }
 
@@ -86,11 +170,17 @@ fun MyScreenEntry() {
 // =================================================================
 @Composable
 fun MyMainScreen(
+    viewModel: MainViewModel = hiltViewModel(),
     onNavigateToAccount: () -> Unit,
-    onNavigateToDisconnect: () -> Unit
+    onNavigateToConnectInfo: () -> Unit,
+    onEditProfile: () -> Unit,
+    onNavigateToEditKeyword: () -> Unit,
+    mediaManager: ImageMediaManager
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Color.White),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
         item {
@@ -116,11 +206,13 @@ fun MyMainScreen(
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("jpg", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("2024년 10월 6일 가입", fontSize = 14.sp, color = Color.Gray)
+                    Text(viewModel.nickname, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("${viewModel.joinDate} 가입", fontSize = 14.sp, color = Color.Gray)
                 }
                 OutlinedButton(
-                    onClick = { /* 프로필 편집 */ },
+                    onClick = {
+                        onEditProfile()
+                    },
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Text("프로필 편집", color = Color.Gray)
@@ -134,7 +226,7 @@ fun MyMainScreen(
         item {
             SectionHeader("설정")
             MyListItem("알림")
-            MyListItem("일상 키워드 관리")
+            MyListItem("키워드 관리", onClick = onNavigateToEditKeyword)
             MyListItem("계정 관리", onClick = onNavigateToAccount)
             Divider(thickness = 8.dp, color = Color(0xFFF9F9F9))
         }
@@ -142,7 +234,7 @@ fun MyMainScreen(
         // 정보 섹션
         item {
             SectionHeader("정보")
-            MyListItem("커플 연결 정보", onClick = onNavigateToDisconnect)
+            MyListItem("커플 연결 정보", onClick = onNavigateToConnectInfo)
             MyListItem("카카오 채널 문의하기")
             MyListItem("앱 리뷰 남기기")
             MyListItem("이용 약관")
@@ -156,7 +248,21 @@ fun MyMainScreen(
 // =================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccountManagementScreen(onBack: () -> Unit, onNavigateToDelete: () -> Unit) {
+fun AccountManagementScreen(
+    viewModel: MainViewModel = hiltViewModel(),
+    onBack: () -> Unit, onNavigateToDelete: () -> Unit
+) {
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    if (showLogoutDialog) {
+        LogoutConfirmDialog(
+            onDismiss = { showLogoutDialog = false },
+            onLogout = {
+                viewModel.logout()
+                showLogoutDialog = false
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -168,7 +274,9 @@ fun AccountManagementScreen(onBack: () -> Unit, onNavigateToDelete: () -> Unit) 
         containerColor = Color.White
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            MyListItem("로그아웃")
+            MyListItem("로그아웃", onClick = {
+                showLogoutDialog = true
+            })
             MyListItem("회원탈퇴", onClick = onNavigateToDelete)
         }
     }
@@ -181,7 +289,20 @@ fun AccountManagementScreen(onBack: () -> Unit, onNavigateToDelete: () -> Unit) 
 @Composable
 fun DeleteAccountWarningScreen(onBack: () -> Unit, onNext: () -> Unit) {
     var isChecked by remember { mutableStateOf(false) }
+    var showConfirmDialog by remember { mutableStateOf(false) }
 
+    if (showConfirmDialog) {
+        CommonConfirmDialog(
+            title = "아직 연결 해제가 안되었어요!",
+            content = "현재 상대방과 연결된 상태에요.\n회원 탈퇴를 위해 연결을 해제하시겠어요?",
+            confirmText = "해제하러 가기",
+            onDismiss = {
+                showConfirmDialog = false
+            }
+        ) {
+            onNext()
+        }
+    }
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -259,18 +380,24 @@ fun DeleteAccountWarningScreen(onBack: () -> Unit, onNext: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = onBack,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Black)
                 ) {
                     Text("유지하기")
                 }
                 Button(
-                    onClick = onNext,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    onClick = {
+                        showConfirmDialog = true
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if(isChecked) Color.Black else Color.LightGray
+                        containerColor = if (isChecked) Color.Black else Color.LightGray
                     ),
                     enabled = isChecked
                 ) {
@@ -349,7 +476,9 @@ fun DeleteAccountReasonScreen(onBack: () -> Unit, onConfirmDelete: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = onBack,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Black)
                 ) {
@@ -357,7 +486,9 @@ fun DeleteAccountReasonScreen(onBack: () -> Unit, onConfirmDelete: () -> Unit) {
                 }
                 Button(
                     onClick = onConfirmDelete,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
                 ) {
@@ -424,7 +555,9 @@ fun DisconnectScreen(onBack: () -> Unit, onConfirmDisconnect: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = onBack,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Black)
                 ) {
@@ -432,7 +565,9 @@ fun DisconnectScreen(onBack: () -> Unit, onConfirmDisconnect: () -> Unit) {
                 }
                 Button(
                     onClick = onConfirmDisconnect,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
                 ) {
@@ -481,7 +616,7 @@ fun MyListItem(title: String, onClick: () -> Unit = {}) {
 fun BackButton(onClick: () -> Unit) {
     IconButton(onClick = onClick) {
         Icon(
-            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, // 또는 ArrowBackIosNew
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack, // 또는 ArrowBackIosNew
             contentDescription = "뒤로가기",
             tint = Color.Black
         )
@@ -493,5 +628,255 @@ fun BulletText(text: String) {
     Row(modifier = Modifier.padding(vertical = 4.dp)) {
         Text("•", modifier = Modifier.padding(end = 8.dp), fontWeight = FontWeight.Bold)
         Text(text, fontSize = 14.sp, color = Color.DarkGray, lineHeight = 20.sp)
+    }
+}
+
+@Composable
+fun CommonConfirmDialog(
+    title: String,
+    content: String,
+    confirmText: String,
+    dismissText: String = "취소",
+    confirmTextColor: Color = Color.Red, // 기본값은 강조색(빨간색)
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            modifier = Modifier.fillMaxWidth(0.9f)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // 1. 텍스트 영역 (상단 패딩 및 중앙 정렬)
+                Column(
+                    modifier = Modifier.padding(
+                        top = 32.dp,
+                        bottom = 24.dp,
+                        start = 20.dp,
+                        end = 20.dp
+                    ),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Center,
+                        color = Color.Black
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = content,
+                        textAlign = TextAlign.Center,
+                        fontSize = 14.sp,
+                        color = Color(0xFF888888), // 이미지와 유사한 회색조
+                        lineHeight = 20.sp
+                    )
+                }
+
+                Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+
+                // 2. 확인 버튼 (전달받은 텍스트 및 색상 적용)
+                TextButton(
+                    onClick = {
+                        onConfirm()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RectangleShape
+                ) {
+                    Text(
+                        text = confirmText,
+                        color = confirmTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+
+                Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+
+                // 3. 취소 버튼
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RectangleShape
+                ) {
+                    Text(
+                        text = dismissText,
+                        color = Color.Black,
+                        fontSize = 16.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LogoutConfirmDialog(onDismiss: () -> Unit, onLogout: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("로그아웃 하시겠어요?", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "언제든 다시 로그인해서\n이어서 사용할 수 있어요.",
+                        textAlign = TextAlign.Center,
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                }
+                Divider(color = Color(0xFFEEEEEE))
+                TextButton(onClick = onLogout, modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)) {
+                    Text("로그아웃", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+                Divider(color = Color(0xFFEEEEEE))
+                TextButton(onClick = onDismiss, modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)) {
+                    Text("취소", color = Color.Black)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProfileEditScreen(
+    viewModel: MainViewModel,
+    mode: EditMode, // ✅ 모드 추가
+    onBack: () -> Unit,
+    onNavigateToDisconnect: () -> Unit,
+    mediaManager: ImageMediaManager,
+) {
+    var showSheet by remember { mutableStateOf(false) }
+
+    // ✅ 모드에 따라 UI 텍스트 및 데이터 분기 처리
+    val title = if (mode == EditMode.ME) "프로필 편집" else "커플 연결 정보"
+    val nicknameValue = if (mode == EditMode.ME) viewModel.nickname else viewModel.partnerNickname
+    val birthdayValue = if (mode == EditMode.ME) viewModel.birthdayValue else viewModel.partnerBirthdayValue
+    val profileUri = if (mode == EditMode.ME) viewModel.profileImageUri else viewModel.partnerProfileUri
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(title, fontWeight = FontWeight.Bold) },
+                navigationIcon = { BackButton(onBack) },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
+                actions = {
+                    // 파트너 모드일 때는 저장 버튼을 숨기거나 읽기 전용으로 처리 가능
+                    if (mode == EditMode.ME) {
+                        TextButton(onClick = {
+                            viewModel.changeProfile()
+                        }) {
+                            Text("저장", color = Color.Red, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            )
+        },
+        containerColor = Color.White
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(30.dp))
+
+            // ✅ 프로필 이미지 (파트너 모드일 때 클릭 방지 가능)
+            ProfileImagePicker(
+                imageUri = profileUri,
+                onImageClick = { if (mode == EditMode.ME) showSheet = true }
+            )
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)) {
+                Text("닉네임", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = nicknameValue,
+                    onValueChange = {
+                        if (mode == EditMode.ME) viewModel.updateNickname(it)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = mode == EditMode.PARTNER, // ✅ 파트너 정보는 읽기 전용
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = Color(0xFFF9F9F9),
+                        focusedContainerColor = Color(0xFFF9F9F9),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = Color.Transparent
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text("생년월일", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = birthdayValue,
+                    onValueChange = {
+                        if (mode == EditMode.ME) viewModel.updateBirthday(it)
+                    },
+                    placeholder = { Text("생년월일을 입력해 주세요", color = Color.LightGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    readOnly = mode == EditMode.PARTNER, // ✅ 파트너 정보는 읽기 전용
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = Color(0xFFF9F9F9),
+                        focusedContainerColor = Color(0xFFF9F9F9),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = Color.Transparent,
+                        cursorColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+            }
+
+            // ✅ 파트너 모드일 때만 하단에 '연결 해제하기' 버튼 추가 (image_967b20 참고)
+            if (mode == EditMode.PARTNER) {
+                Spacer(modifier = Modifier.weight(1f))
+
+                Button(
+                    onClick = onNavigateToDisconnect,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("연결 해제하기", color = Color.White)
+                }
+            }
+        }
+
+        // 바텀시트도 내 프로필일 때만 작동하도록 함
+        if (mode == EditMode.ME) {
+            ProfileImageBottomSheet(
+                showSheet = showSheet,
+                onDismiss = { showSheet = false },
+                onCameraClick = { mediaManager.launchCamera { viewModel.profileImageUri = it } },
+                onGalleryClick = { mediaManager.launchGallery { viewModel.profileImageUri = it } }
+            )
+        }
     }
 }
