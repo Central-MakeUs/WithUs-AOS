@@ -61,8 +61,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -86,6 +89,7 @@ import com.widthus.app.screen.BackButton
 import com.widthus.app.screen.EditMode
 import com.widthus.app.screen.ImageMediaManager
 import com.widthus.app.screen.Screen
+import com.widthus.app.utils.DateMaskTransformation
 import com.widthus.app.utils.Utils.calculateRemainingTime
 import com.widthus.app.utils.Utils.checkIsTimePassed
 import com.widthus.app.viewmodel.MainViewModel
@@ -251,219 +255,151 @@ fun StepInputScreen(
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
 
-    val cameraPermissionState = rememberPermissionState(
-        permission = CAMERA
-    )
+    // 에러 상태 체크
+    val isNicknameError = viewModel.nickname.isNotEmpty() && (viewModel.nickname.length < 2 || viewModel.nickname.length > 8)
+    // 생일 에러: 입력이 시작되었으나 8자가 아닐 때
+    val isBirthdayError = viewModel.birthdayValue.toString().isNotEmpty() && viewModel.birthdayValue.toString().length < 8
 
-    // 카메라/갤러리 런처 로직 (기존과 동일)
-    val tempImageUri = remember {
-        val file = File.createTempFile("profile_", ".jpg", context.externalCacheDir)
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    }
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) viewModel.updateProfileImage(tempImageUri)
-        showSheet = false
-    }
-
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        viewModel.updateProfileImage(uri)
-        showSheet = false
-    }
-    // 에러 메시지 표시 로직
-    val isNicknameError =
-        viewModel.nickname.isNotEmpty() && (viewModel.nickname.length < 2 || viewModel.nickname.length > 8)
-
-    // 유효성 검사: 1단계는 닉네임 필수, 4단계는 건너뛰기 가능하므로 항상 true
+    // 버튼 활성화 유효성 검사
     val currentValid = when (currentStep) {
-        1 -> !isNicknameError
-        else -> true
+        1 -> viewModel.nickname.length in 2..8
+        2 -> viewModel.birthdayValue.toString().length == 8
+        else -> true // 4단계는 건너뛰기 가능
     }
 
     Scaffold(
-        containerColor = Color.White, topBar = {
-            // 4단계(프로필)일 때만 뒤로가기 버튼 표시
-            if (currentStep == 4) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 8.dp, top = 8.dp)
-                ) {
-                    IconButton(onClick = { currentStep = 1 }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "뒤로가기",
-                            tint = Color.Black
-                        )
+        containerColor = Color.White,
+        topBar = {
+            // 2단계나 4단계일 때 뒤로가기 버튼 표시
+            if (currentStep != 1) {
+                Box(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 8.dp)) {
+                    IconButton(onClick = {
+                        currentStep = if (currentStep == 4) 2 else 1
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로가기", tint = Color.Black)
                     }
                 }
             }
-        }) { paddingValues ->
+        }
+    ) { paddingValues ->
         Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
+            modifier = Modifier.padding(paddingValues).fillMaxSize().padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(60.dp))
 
-            // 타이틀 및 설명 영역
+            // 1. 타이틀 영역
             Text(
-                text = if (currentStep == 1) "위더스에서 활동할 닉네임은?" else "프로필 사진을 등록해 주세요",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+                text = when(currentStep) {
+                    1 -> "위더스에서 활동할 닉네임은?"
+                    2 -> "생일을 입력해 주세요"
+                    else -> "프로필 사진을 등록해 주세요"
+                },
+                fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = if (currentStep == 1) "상대방에게 주로 불리는 애칭을 입력해도 좋아요"
-                else "사진을 등록하지 않으면 기본 프로필이 보여집니다.",
-                fontSize = 16.sp,
-                color = Color.Gray,
-                textAlign = TextAlign.Center
+                text = when(currentStep) {
+                    1 -> "상대방에게 주로 불리는 애칭을 입력해도 좋아요"
+                    2 -> "서로의 생일에 특별한 사진을 주고 받아요"
+                    else -> "사진을 등록하지 않으면 기본 프로필이 보여집니다."
+                },
+                fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(60.dp))
 
-            // 입력 영역
-            if (currentStep == 1) {
-                // 1단계: 닉네임 입력 (중앙 정렬)
+            val currentText = if (currentStep == 1) {
+                viewModel.nickname
+            } else {
+                viewModel.birthdayValue.toString() // 명시적으로 String 변환
+            }
+
+            // 2. 입력 영역 (닉네임 & 생일)
+            if (currentStep == 1 || currentStep == 2) {
+                val textValue = if (currentStep == 1) {
+                    // String인 nickname을 TextFieldValue로 변환 (커서 위치는 마지막으로 설정)
+                    TextFieldValue(
+                        text = viewModel.nickname,
+                        selection = TextRange(viewModel.nickname.length)
+                    )
+                } else {
+                    // 이미 TextFieldValue인 birthdayValue 사용
+                    viewModel.birthdayValue
+                }
+
                 OutlinedTextField(
-                    value = viewModel.nickname,
-                    onValueChange = { if (it.length <= 8) viewModel.updateNickname(it) },
+                    value = textValue, // 이제 항상 TextFieldValue 타입입니다.
+                    onValueChange = { newValue ->
+                        if (currentStep == 1) {
+                            // 닉네임 업데이트 (String만 추출해서 전달)
+                            if (newValue.text.length <= 8) {
+                                viewModel.updateNickname(newValue.text)
+                            }
+                        } else {
+                            // 생일 업데이트 (숫자만 필터링 후 TextFieldValue 전달)
+                            val digits = newValue.text.filter { it.isDigit() }
+                            if (digits.length <= 8) {
+                                // 커서 위치 등을 유지하기 위해 copy 사용
+                                viewModel.updateBirthday(newValue.copy(text = digits))
+                            }
+                        }
+                    },
                     textStyle = LocalTextStyle.current.copy(
                         fontSize = 18.sp, textAlign = TextAlign.Center, color = Color.Black
                     ),
                     placeholder = {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center
-                        ) {
-                            Text("닉네임을 입력해주세요.", color = Color(0xFFC7C7C7), fontSize = 18.sp)
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (currentStep == 1) "닉네임을 입력해주세요" else "YYYYMMDD",
+                                color = Color(0xFFC7C7C7),
+                                fontSize = 18.sp
+                            )
                         }
                     },
+                    // 2단계(생일)일 때만 마스크 및 숫자 키패드 적용
+                    visualTransformation = if (currentStep == 2) DateMaskTransformation() else VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (currentStep == 2) KeyboardType.Number else KeyboardType.Text
+                    ),
                     singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    shape = RoundedCornerShape(8.dp), // 네모 박스의 둥글기 조절
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,   // 포커스 되었을 때 테두리 색
-                        unfocusedBorderColor = Color(0xFFF0F0F0), // 기본 테두리 색
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color(0xFFF0F0F0),
                         cursorColor = Color.Black,
                         focusedContainerColor = Color(0xFFF0F0F0),
                         unfocusedContainerColor = Color(0xFFF0F0F0)
                     )
                 )
-
-                // 메시지 영역의 높이를 고정(height)하면 메시지가 나타날 때 UI가 덜컹거리는 것을 방지할 수 있습니다.
-                Box(
-                    modifier = Modifier
-                        .height(30.dp)
-                        .padding(top = 8.dp)
-                ) {
-                    if (isNicknameError) {
-                        Text(
-                            text = "2~8자 이내로 입력해주세요.",
-                            color = Color(0xFFF5A7B8),
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            } else {
-                // 4단계: 프로필 이미지 등록
-                Box(
-                    modifier = Modifier
-                        .size(160.dp) // 버튼 공간까지 고려하여 전체 크기 설정
-                        .clickable(
-                        ) {
-                            if (viewModel.profileImageUri == null) {
-                                showSheet = true
-                            }
-                        }, contentAlignment = Alignment.Center
-                ) {
-                    // 4단계: 프로필 이미지 등록
-                    Box(
-                        modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center
-                    ) {
-                        // 1. 메인 프로필 원형 박스 (테두리 검정, 안쪽 회색)
-                        Box(
-                            modifier = Modifier
-                                .size(150.dp)
-
-                                .background(Color(0xFFD9D9D9), CircleShape) // 안쪽은 회색 배경
-                                .clip(CircleShape)
-                                .clickable {
-                                    if (viewModel.profileImageUri == null) showSheet = true
-                                }, contentAlignment = Alignment.Center
-                        ) {
-                            if (viewModel.profileImageUri != null) {
-                                // 이미지가 있을 때: 사진 표시
-                                AsyncImage(
-                                    model = viewModel.profileImageUri,
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                // 이미지가 없을 때: 격자 아이콘 표시
-                                Icon(
-                                    painter = painterResource(id = R.drawable.photo_grid),
-                                    contentDescription = null,
-                                    tint = Color.Unspecified,
-                                    modifier = Modifier.size(100.dp) // 격자는 조금 더 크게 설정
-                                )
-                            }
-                        }
-
-                        // 2. 우측 하단 카메라 추가 버튼 (이미지가 없을 때만 표시)
-                        if (viewModel.profileImageUri == null) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd) // 가장 바깥 Box 기준 우측 하단
-                                    .padding(bottom = 10.dp, end = 10.dp) // 테두리 위에 걸치도록 위치 조정
-                                    .size(44.dp)
-                                    .shadow(4.dp, CircleShape)
-                                    .background(Color.White, CircleShape)
-                                    .clickable { showSheet = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.photo_add),
-                                    contentDescription = "사진 추가",
-                                    tint = Color.Unspecified,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                    }
-                }
             }
+            else {
+                // (4단계 프로필 등록 UI - 기존 코드 유지)
+                ProfileImagePicker(viewModel) { showSheet = true }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
-            // 하단 버튼
+            // 4. 하단 버튼
             Button(
                 onClick = {
-                    if (currentStep == 1) currentStep = 4 else onAllFinish()
+                    when (currentStep) {
+                        1 -> currentStep = 2
+                        2 -> currentStep = 4
+                        4 -> onAllFinish()
+                    }
                 },
                 enabled = currentValid,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (currentValid) Color.Black else Color(0xFFE0E0E0)
                 )
             ) {
                 Text(
-                    text = if (currentStep == 1) "다음" else "프로필 완성하기",
-                    fontSize = 18.sp,
-                    color = Color.White
+                    text = if (currentStep == 4) "프로필 완성하기" else "다음",
+                    fontSize = 18.sp, color = Color.White
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -492,30 +428,30 @@ fun StepInputScreen(
                             Icons.Default.AccountCircle, contentDescription = null
                         )
                     }, modifier = Modifier.clickable {
-                        // 권한 체크 후 분기 처리
-                        when {
-                            cameraPermissionState.status.isGranted -> {
-                                // 권한이 이미 있음: 카메라 바로 실행
-                                cameraLauncher.launch(tempImageUri)
-                            }
-
-                            cameraPermissionState.status.shouldShowRationale -> {
-                                // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
-                                // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
-                                cameraPermissionState.launchPermissionRequest()
-                            }
-
-                            else -> {
-                                // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
-                                cameraPermissionState.launchPermissionRequest()
-                            }
-                        }
+//                        // 권한 체크 후 분기 처리
+//                        when {
+//                            cameraPermissionState.status.isGranted -> {
+//                                // 권한이 이미 있음: 카메라 바로 실행
+//                                cameraLauncher.launch(tempImageUri)
+//                            }
+//
+//                            cameraPermissionState.status.shouldShowRationale -> {
+//                                // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
+//                                // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
+//                                cameraPermissionState.launchPermissionRequest()
+//                            }
+//
+//                            else -> {
+//                                // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
+//                                cameraPermissionState.launchPermissionRequest()
+//                            }
+//                        }
                     })
                     ListItem(headlineContent = { Text("앨범에서 가져오기") }, leadingContent = {
                         Icon(
                             Icons.Default.DateRange, contentDescription = null
                         )
-                    }, modifier = Modifier.clickable { galleryLauncher.launch("image/*") })
+                    }, modifier = Modifier.clickable { })
                 }
             }
         }
