@@ -799,9 +799,8 @@ fun ProfileEditScreen(
         ) {
             Spacer(modifier = Modifier.height(30.dp))
 
-            // ✅ 프로필 이미지 (파트너 모드일 때 클릭 방지 가능)
             ProfileImagePicker(
-                imageUri = profileUri,
+                viewModel = viewModel,
                 onImageClick = { if (mode == EditMode.ME) showSheet = true }
             )
 

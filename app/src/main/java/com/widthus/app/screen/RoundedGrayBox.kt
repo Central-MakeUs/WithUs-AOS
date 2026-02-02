@@ -71,6 +71,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -98,6 +99,7 @@ import java.io.File
 import java.util.Calendar
 import kotlin.collections.getOrNull
 import com.withus.app.R
+import org.withus.app.debug
 
 @Composable
 fun TestHomeScreen(
@@ -247,7 +249,8 @@ fun CalendarHomeScreen(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun StepInputScreen(
-    viewModel: MainViewModel, onAllFinish: () -> Unit
+    viewModel: MainViewModel,     mediaManager: ImageMediaManager,
+    onAllFinish: () -> Unit
 ) {
     // 이제 단계는 1(닉네임)과 4(프로필)만 사용합니다.
     var currentStep by remember { mutableStateOf(1) }
@@ -260,11 +263,19 @@ fun StepInputScreen(
     // 생일 에러: 입력이 시작되었으나 8자가 아닐 때
     val isBirthdayError = viewModel.birthdayValue.toString().isNotEmpty() && viewModel.birthdayValue.toString().length < 8
 
+    val raw = viewModel.birthdayValue.text
+    val digits = raw.filter { it.isDigit() }
+
+    debug("viewModel.birthdayValue.text='${raw}', digits='${digits}', textLen=${raw.length}, digitLen=${digits.length}, selection=${viewModel.birthdayValue.selection}")
     // 버튼 활성화 유효성 검사
     val currentValid = when (currentStep) {
         1 -> viewModel.nickname.length in 2..8
-        2 -> viewModel.birthdayValue.toString().length == 8
-        else -> true // 4단계는 건너뛰기 가능
+        2 -> {
+            val digits = viewModel.birthdayValue.text.filter { it.isDigit() }
+            // 8자리이면서 + 실제 유효한 날짜여야 true
+            digits.length == 8 && isValidDate(digits)
+        }
+        else -> true
     }
 
     Scaffold(
@@ -320,7 +331,7 @@ fun StepInputScreen(
                 val textValue = if (currentStep == 1) {
                     // String인 nickname을 TextFieldValue로 변환 (커서 위치는 마지막으로 설정)
                     TextFieldValue(
-                        text = viewModel.nickname,
+                        text = currentText,
                         selection = TextRange(viewModel.nickname.length)
                     )
                 } else {
@@ -337,12 +348,7 @@ fun StepInputScreen(
                                 viewModel.updateNickname(newValue.text)
                             }
                         } else {
-                            // 생일 업데이트 (숫자만 필터링 후 TextFieldValue 전달)
-                            val digits = newValue.text.filter { it.isDigit() }
-                            if (digits.length <= 8) {
-                                // 커서 위치 등을 유지하기 위해 copy 사용
-                                viewModel.updateBirthday(newValue.copy(text = digits))
-                            }
+                            viewModel.updateBirthday(newValue)
                         }
                     },
                     textStyle = LocalTextStyle.current.copy(
@@ -351,14 +357,14 @@ fun StepInputScreen(
                     placeholder = {
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Text(
-                                if (currentStep == 1) "닉네임을 입력해주세요" else "YYYYMMDD",
+                                if (currentStep == 1) "닉네임을 입력해주세요" else "YYYY-MM-DD",
                                 color = Color(0xFFC7C7C7),
                                 fontSize = 18.sp
                             )
                         }
                     },
                     // 2단계(생일)일 때만 마스크 및 숫자 키패드 적용
-                    visualTransformation = if (currentStep == 2) DateMaskTransformation() else VisualTransformation.None,
+//                    visualTransformation = if (currentStep == 2) DateMaskTransformation() else VisualTransformation.None,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = if (currentStep == 2) KeyboardType.Number else KeyboardType.Text
                     ),
@@ -373,6 +379,26 @@ fun StepInputScreen(
                         unfocusedContainerColor = Color(0xFFF0F0F0)
                     )
                 )
+
+                Box(
+                    modifier = Modifier
+                        .height(30.dp)
+                        .padding(top = 8.dp)
+                ) {
+                    if (!currentValid) {
+                        Text(
+                            text = when(currentStep) {
+                                1 -> "2~8자 이내로 입력해주세요."
+                                2 -> "올바른 생년월일을 입력해주세요."
+                                else -> {""}
+                            },
+                            color = Color(0xFFF5A7B8),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
             }
             else {
                 // (4단계 프로필 등록 UI - 기존 코드 유지)
@@ -428,30 +454,19 @@ fun StepInputScreen(
                             Icons.Default.AccountCircle, contentDescription = null
                         )
                     }, modifier = Modifier.clickable {
-//                        // 권한 체크 후 분기 처리
-//                        when {
-//                            cameraPermissionState.status.isGranted -> {
-//                                // 권한이 이미 있음: 카메라 바로 실행
-//                                cameraLauncher.launch(tempImageUri)
-//                            }
-//
-//                            cameraPermissionState.status.shouldShowRationale -> {
-//                                // 사용자가 한 번 거절했음: 왜 필요한지 설명 후 다시 요청
-//                                // (간단하게 토스트를 띄우거나 바로 다시 요청할 수 있음)
-//                                cameraPermissionState.launchPermissionRequest()
-//                            }
-//
-//                            else -> {
-//                                // 처음 요청하거나 거절된 상태: 권한 요청 팝업 띄우기
-//                                cameraPermissionState.launchPermissionRequest()
-//                            }
-//                        }
+                        mediaManager.launchCamera {
+                            viewModel.profileImageUri = it
+                        }
                     })
                     ListItem(headlineContent = { Text("앨범에서 가져오기") }, leadingContent = {
                         Icon(
                             Icons.Default.DateRange, contentDescription = null
                         )
-                    }, modifier = Modifier.clickable { })
+                    }, modifier = Modifier.clickable {
+                        mediaManager.launchGallery {
+                            viewModel.profileImageUri = it
+                        }
+                    })
                 }
             }
         }
@@ -2382,7 +2397,7 @@ fun KeywordTabChip(
 
 @Composable
 fun ProfileImagePicker(
-    imageUri: Uri?,
+    viewModel: MainViewModel,
     onImageClick: () -> Unit
 ) {
     Box(
@@ -2403,10 +2418,10 @@ fun ProfileImagePicker(
                 .border(1.dp, Color(0xFFF0F0F0), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            if (imageUri != null) {
+            if (viewModel.profileImageUri != null) {
                 // 이미지가 있을 때: 사진 표시
                 AsyncImage(
-                    model = imageUri,
+                    model = viewModel.profileImageUri,
                     contentDescription = "프로필 이미지",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
@@ -2423,7 +2438,7 @@ fun ProfileImagePicker(
         }
 
         // 2. 우측 하단 카메라 추가 버튼 (이미지가 없을 때만 표시)
-        if (imageUri == null) {
+        if (viewModel.profileImageUri == null) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

@@ -4,8 +4,15 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import org.withus.app.token.TokenManager.Companion.ACCESS_TOKEN
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -13,26 +20,24 @@ import javax.inject.Singleton
 class TokenManager @Inject constructor(
     private val dataStore: DataStore<Preferences>
 ) {
+
     companion object {
         private val ACCESS_TOKEN = stringPreferencesKey("access_token")
     }
 
-    // 토큰 읽기
-    fun getAccessToken(): Flow<String?> {
-        return dataStore.data.map { prefs ->
-            prefs[ACCESS_TOKEN]
+    private val _token = MutableStateFlow<String?>(null)
+    val token: StateFlow<String?> = _token.asStateFlow()
+
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            dataStore.data.map { it[ACCESS_TOKEN] }.collect { _token.value = it }
         }
     }
 
-    // 토큰 저장
+    fun getAccessTokenSync(): String? = _token.value
+
     suspend fun saveAccessToken(token: String) {
-        dataStore.edit { prefs ->
-            prefs[ACCESS_TOKEN] = token
-        }
-    }
-
-    // 토큰 삭제 (로그아웃 시)
-    suspend fun clearToken() {
-        dataStore.edit { it.clear() }
+        dataStore.edit { it[ACCESS_TOKEN] = token }
     }
 }
+

@@ -23,33 +23,43 @@ class CombinedAuthLoggingInterceptor @Inject constructor(
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
-        val requestBuilder = originalRequest.newBuilder()
+        val originalUrl = originalRequest.url
 
-        // 1. Base URL 교체 로직 적용
+        // 1. 외부 URL(S3 등)인지 체크
+        if (originalUrl.host.contains("amazonaws.com")) {
+            Log.d("OkHttp", "외부 URL 요청 감지: S3 업로드를 진행합니다.")
+
+            // S3로 보낼 때는 내 서버의 Bearer 토큰 헤더를 제거해야 합니다. (인증 충돌 방지)
+            val s3Request = originalRequest.newBuilder()
+                .removeHeader("Authorization")
+                .build()
+
+            return chain.proceed(s3Request)
+        }
+
+        // 2. 내 서버 API 요청인 경우에만 Base URL 교체 로직 적용
         val newBaseUrl = BASE_URL
-        Log.d("OkHttp", "newBaseUrl : $newBaseUrl")
-
         val httpUrl = newBaseUrl.toHttpUrlOrNull()
 
-        // URL 교체 처리
         val finalRequest = if (httpUrl != null) {
-            val newUrl = originalRequest.url.newBuilder()
+            val newUrl = originalUrl.newBuilder()
                 .scheme(httpUrl.scheme)
                 .host(httpUrl.host)
                 .port(httpUrl.port)
                 .build()
-            requestBuilder.url(newUrl)
-        } else {
-            requestBuilder
-        }.build()
 
+            Log.d("OkHttp", "API URL 교체 적용: $newUrl")
+            originalRequest.newBuilder().url(newUrl).build()
+        } else {
+            originalRequest
+        }
 
         val path = finalRequest.url.encodedPath
 
         // 3. 토큰 추가 로직 (재빌드)
         val authAddedBuilder = finalRequest.newBuilder()
         val token = runBlocking {
-            tokenManager.getAccessToken().first()
+            tokenManager.getAccessTokenSync()
         }
         if (!token.isNullOrBlank()) {
             authAddedBuilder.header("Authorization", "Bearer $token")

@@ -40,9 +40,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kakao.sdk.common.util.Utility
 import com.kakao.sdk.user.UserApiClient
+import com.widthus.app.model.ProfileLoadResult
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
 import kotlinx.coroutines.launch
+import org.withus.app.debug
 
 sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
@@ -76,11 +78,14 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
     val schedules = viewModel.dummySchedules
     val memories = viewModel.dummyMemories
     var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
+    // 3. 미디어 매니저 (최상위 공유)
+    val mediaManager = rememberImageMediaManager()
 
     NavHost(
         navController = navController,
 //        startDestination = Screen.Onboarding.route
-        startDestination = Screen.Home.route
+        startDestination = Screen.Login.route
+//        startDestination = Screen.Home.route
 //        startDestination = Screen.Gallery.route
 //        startDestination = Screen.PhotoFlow.route
     ) {
@@ -102,16 +107,91 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                 onKakaoLogin = {
                     UserApiClient.instance.loginWithKakaoTalk(context) { token, error ->
                         if (error != null) {
-                            Log.e("TAG", "로그인 실패", error)
+                            // 에러 메시지 추출
+                            val errMsg = error.message ?: error.toString()
+
+                            // 로그는 남기되, 사용자에게는 Toast로 표시
+                            Log.e("TAG", "로그인 실패: $errMsg", error)
+                            Toast.makeText(context, "로그인 실패: $errMsg", Toast.LENGTH_LONG).show()
+
+                            // 디버그용: 키 해시 출력 (원하면)
                             val keyHash = Utility.getKeyHash(context)
-                            Log.e("KeyHash", "현재 내 기기의 키 해시: $keyHash")
+                            Log.d("KeyHash", "현재 기기 키 해시: $keyHash")
+
+                            // 카카오톡이 설치되어 있지 않은 경우, 카카오 계정 로그인으로 폴백
+                            // (에러 문자열에 따라 판별하거나, Throwable 타입 체크 가능)
+                            val lower = errMsg.lowercase()
+                            if (lower.contains("kakaotalk not installed") || lower.contains("notinstalled") ||
+                                lower.contains("notsupported") || error::class.simpleName == "ClientError") {
+                                // 안전하게 계정 로그인 시도
+                                UserApiClient.instance.loginWithKakaoAccount(context) { accToken, accError ->
+                                    if (accError != null) {
+                                        val accMsg = accError.message ?: accError.toString()
+                                        Log.e("TAG", "카카오계정 로그인 실패: $accMsg", accError)
+                                        Toast.makeText(context, "카카오계정 로그인 실패: $accMsg", Toast.LENGTH_LONG).show()
+                                    } else if (accToken != null) {
+                                        Log.i("TAG", "카카오계정 로그인 성공 ${accToken.accessToken}")
+                                        coroutineScope.launch {
+                                            val isSuccess = viewModel.handleKakaoLogin(accToken.accessToken)
+                                            if (isSuccess) {
+
+                                                when (val result = viewModel.getUserProfile()) {
+                                                    is ProfileLoadResult.Success -> {
+                                                        // 홈 화면으로 네비게이션 이동
+                                                        navController.navigate(Screen.Home.route) {
+                                                            popUpTo(Screen.Login.route) { inclusive = true }
+                                                        }
+                                                    }
+                                                    is ProfileLoadResult.ToOnboarding -> {
+                                                        navController.navigate(Screen.StepInput.route) {
+                                                            popUpTo(Screen.Login.route) { inclusive = true }
+                                                        }
+                                                    }
+                                                    is ProfileLoadResult.Error -> {
+                                                        // 에러 메시지 토스트나 스낵바 표시
+                                                        Toast.makeText(context, "로그인 실패: ${result.message}", Toast.LENGTH_LONG).show()
+
+                                                    }
+
+                                                    else -> {
+
+                                                    }
+                                                }
+
+                                            } else {
+                                                Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         } else if (token != null) {
                             Log.i("TAG", "로그인 성공 ${token.accessToken}")
                             coroutineScope.launch {
                                 val isSuccess = viewModel.handleKakaoLogin(token.accessToken)
                                 if (isSuccess) {
-                                    navController.navigate(Screen.StepInput.route) {
-                                        popUpTo(Screen.Login.route) { inclusive = true }
+
+                                    when (val result = viewModel.getUserProfile()) {
+                                        is ProfileLoadResult.Success -> {
+                                            debug("navigate home")
+                                            // 홈 화면으로 네비게이션 이동
+                                            navController.navigate(Screen.Home.route) {
+                                                popUpTo(Screen.Login.route) { inclusive = true }
+                                            }
+                                        }
+                                        is ProfileLoadResult.ToOnboarding -> {
+                                            debug("navigate ToOnboarding")
+                                            navController.navigate(Screen.StepInput.route) {
+                                                popUpTo(Screen.Login.route) { inclusive = true }
+                                            }
+                                        }
+                                        is ProfileLoadResult.Error -> {
+                                            // 에러 메시지 토스트나 스낵바 표시
+                                            Toast.makeText(context, "로그인 실패: ${result.message}", Toast.LENGTH_LONG).show()
+
+                                        }
+
+                                        else -> {}
                                     }
                                 } else {
                                     Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
@@ -129,7 +209,22 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
         composable(Screen.StepInput.route) {
             StepInputScreen(
                 viewModel = viewModel,
-                onAllFinish = { navController.navigate(Screen.OnboardingConnect.route) }
+                mediaManager = mediaManager,
+                onAllFinish = {
+                                    /*navController.navigate(Screen.OnboardingConnect.route)*/
+                    coroutineScope.launch {
+                        when (viewModel.uploadProfileAndSave(false)) {
+                            ProfileLoadResult.Success -> {
+                                navController.navigate(Screen.OnboardingConnect.route) {
+                                    popUpTo(Screen.Login.route) { inclusive = true }
+                                }
+                            }
+                            else -> {
+                                Toast.makeText(context, "업로드 실패", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
             )
         }
 
@@ -257,7 +352,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
         }
 
         composable(Screen.Home.route) {
-            MainScreen(viewModel, navController)
+            MainScreen(viewModel, navController, mediaManager)
         }
 
         composable(Screen.PhotoFlow.route) {
@@ -282,15 +377,12 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun MainScreen(viewModel: MainViewModel, navController: NavHostController) {
+fun MainScreen(viewModel: MainViewModel, navController: NavHostController, mediaManager: ImageMediaManager) {
     // 1. 네비게이션 상태
     var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
 
     // 2. 에디터(네컷 만들기) 화면 표시 여부 - true면 바텀바 숨김
     var isEditorOpen by remember { mutableStateOf(false) }
-
-    // 3. 미디어 매니저 (최상위 공유)
-    val mediaManager = rememberImageMediaManager()
 
     // 4. 저장된 네컷 리스트 (실제로는 ViewModel이나 Room DB에서 관리 권장)
     // 테스트를 위해 여기서 state로 관리합니다.

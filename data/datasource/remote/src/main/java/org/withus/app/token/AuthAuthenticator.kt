@@ -14,7 +14,7 @@ class AuthAuthenticator @Inject constructor(
 ) : Authenticator {
     override fun authenticate(route: Route?, response: Response): Request? {
         val refreshToken = runBlocking {
-            tokenManager.getAccessToken().first()
+            tokenManager.getAccessTokenSync()
         }
 
         if (refreshToken == null || refreshToken == "LOGIN") {
