@@ -2,9 +2,14 @@ package org.withus.app.remote
 
 import okhttp3.RequestBody
 import org.withus.app.model.CommonResponse
+import org.withus.app.model.InvitationCodeData
+import org.withus.app.model.JoinCoupleData
+import org.withus.app.model.JoinCouplePreviewData
+import org.withus.app.model.JoinCoupleRequest
 import org.withus.app.model.LoginResponse
 import org.withus.app.model.PresignedUrlData
 import org.withus.app.model.ProfileResponse
+import org.withus.app.model.StatusData
 import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
@@ -48,5 +53,19 @@ interface ApiService {
     suspend fun uploadUserProfile(
         @Body profileRequest: ProfileUpdateRequest
     ): Response<CommonResponse<ProfileResponse>>
-}
 
+    @POST("/api/me/status") suspend fun getUserStatus(): Response<CommonResponse<StatusData>>
+
+    @POST("/api/me/couple/join")
+    suspend fun joinCouple(
+        @Body request: JoinCoupleRequest
+    ): Response<CommonResponse<JoinCoupleData>>
+
+    // 초대 코드로 상대 정보 미리보기
+    @POST("/api/me/couple/join/preview")
+    suspend fun previewJoinCouple(
+        @Body request: JoinCoupleRequest
+    ): Response<CommonResponse<JoinCouplePreviewData>>
+
+    @POST("/api/me/user/invitation-codes") suspend fun createInvitationCode(): Response<CommonResponse<InvitationCodeData>>
+}

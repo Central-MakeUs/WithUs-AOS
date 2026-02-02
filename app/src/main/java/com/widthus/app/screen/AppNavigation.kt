@@ -43,8 +43,10 @@ import com.kakao.sdk.user.UserApiClient
 import com.widthus.app.model.ProfileLoadResult
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.withus.app.debug
+import org.withus.app.model.ProfileSettingStatus
 
 sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
@@ -122,34 +124,39 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                             // (에러 문자열에 따라 판별하거나, Throwable 타입 체크 가능)
                             val lower = errMsg.lowercase()
                             if (lower.contains("kakaotalk not installed") || lower.contains("notinstalled") ||
-                                lower.contains("notsupported") || error::class.simpleName == "ClientError") {
+                                lower.contains("notsupported") || error::class.simpleName == "ClientError"
+                            ) {
                                 // 안전하게 계정 로그인 시도
                                 UserApiClient.instance.loginWithKakaoAccount(context) { accToken, accError ->
                                     if (accError != null) {
                                         val accMsg = accError.message ?: accError.toString()
                                         Log.e("TAG", "카카오계정 로그인 실패: $accMsg", accError)
-                                        Toast.makeText(context, "카카오계정 로그인 실패: $accMsg", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(
+                                            context,
+                                            "카카오계정 로그인 실패: $accMsg",
+                                            Toast.LENGTH_LONG
+                                        ).show()
                                     } else if (accToken != null) {
                                         Log.i("TAG", "카카오계정 로그인 성공 ${accToken.accessToken}")
                                         coroutineScope.launch {
-                                            val isSuccess = viewModel.handleKakaoLogin(accToken.accessToken)
+                                            val isSuccess =
+                                                viewModel.handleKakaoLogin(accToken.accessToken)
                                             if (isSuccess) {
 
                                                 when (val result = viewModel.getUserProfile()) {
                                                     is ProfileLoadResult.Success -> {
-                                                        // 홈 화면으로 네비게이션 이동
-                                                        navController.navigate(Screen.Home.route) {
-                                                            popUpTo(Screen.Login.route) { inclusive = true }
-                                                        }
+                                                        viewModel.navigateToNextScreenBasedOnStatus(
+                                                            navController
+                                                        )
                                                     }
-                                                    is ProfileLoadResult.ToOnboarding -> {
-                                                        navController.navigate(Screen.StepInput.route) {
-                                                            popUpTo(Screen.Login.route) { inclusive = true }
-                                                        }
-                                                    }
+
                                                     is ProfileLoadResult.Error -> {
                                                         // 에러 메시지 토스트나 스낵바 표시
-                                                        Toast.makeText(context, "로그인 실패: ${result.message}", Toast.LENGTH_LONG).show()
+                                                        Toast.makeText(
+                                                            context,
+                                                            "로그인 실패: ${result.message}",
+                                                            Toast.LENGTH_LONG
+                                                        ).show()
 
                                                     }
 
@@ -159,7 +166,11 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                                                 }
 
                                             } else {
-                                                Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(
+                                                    context,
+                                                    "서버 로그인 실패",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                             }
                                         }
                                     }
@@ -173,21 +184,18 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 
                                     when (val result = viewModel.getUserProfile()) {
                                         is ProfileLoadResult.Success -> {
-                                            debug("navigate home")
-                                            // 홈 화면으로 네비게이션 이동
-                                            navController.navigate(Screen.Home.route) {
-                                                popUpTo(Screen.Login.route) { inclusive = true }
-                                            }
+                                            viewModel.navigateToNextScreenBasedOnStatus(
+                                                navController
+                                            )
                                         }
-                                        is ProfileLoadResult.ToOnboarding -> {
-                                            debug("navigate ToOnboarding")
-                                            navController.navigate(Screen.StepInput.route) {
-                                                popUpTo(Screen.Login.route) { inclusive = true }
-                                            }
-                                        }
+
                                         is ProfileLoadResult.Error -> {
                                             // 에러 메시지 토스트나 스낵바 표시
-                                            Toast.makeText(context, "로그인 실패: ${result.message}", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(
+                                                context,
+                                                "로그인 실패: ${result.message}",
+                                                Toast.LENGTH_LONG
+                                            ).show()
 
                                         }
 
@@ -211,14 +219,13 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                 viewModel = viewModel,
                 mediaManager = mediaManager,
                 onAllFinish = {
-                                    /*navController.navigate(Screen.OnboardingConnect.route)*/
+                    /*navController.navigate(Screen.OnboardingConnect.route)*/
                     coroutineScope.launch {
                         when (viewModel.uploadProfileAndSave(false)) {
                             ProfileLoadResult.Success -> {
-                                navController.navigate(Screen.OnboardingConnect.route) {
-                                    popUpTo(Screen.Login.route) { inclusive = true }
-                                }
+                                viewModel.navigateToNextScreenBasedOnStatus(navController)
                             }
+
                             else -> {
                                 Toast.makeText(context, "업로드 실패", Toast.LENGTH_LONG).show()
                             }
@@ -231,7 +238,8 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
         composable(Screen.OnboardingConnect.route) {
             OnboardingConnectScreen(
                 viewModel = viewModel,
-                onInviteClick = { navController.navigate(Screen.Invite.route) },
+                onInviteClick = {
+                    navController.navigate(Screen.Invite.route) },
                 onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
                 onCloseClick = { navController.navigate(Screen.ConnectionPending.route) },
                 topBar = {
@@ -303,9 +311,13 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
             ConnectConfirmScreen(
                 viewModel = viewModel,
                 onConfirmClick = {
+                    coroutineScope.launch { it
+                        viewModel.joinCouple(it)
+                    }
                     navController.navigate(Screen.ConnectComplete.route)
                 },
                 onLaterClick = {},
+                navController
             )
         }
 
@@ -335,6 +347,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                         navController.navigate(Screen.OnboardingConnect.route)
                     }
                 },
+                viewModel = viewModel
             )
         }
 
@@ -346,7 +359,18 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
                     }
                 },
                 onConnect = {
-                    navController.navigate(Screen.ConnectConfirm.route)
+                    coroutineScope.launch {
+                        // 미리보기
+                        viewModel.previewJoinCouple(it)
+                            .onSuccess { preview ->
+                                // 현재(출발) 백스택 엔트리에 데이터 저장
+                                navController.currentBackStackEntry?.savedStateHandle?.set("join_preview", preview)
+                                // 목적지로 이동
+                                navController.navigate(Screen.ConnectConfirm.route)
+                            }
+                            .onFailure { /* 에러 처리 */ }
+
+                    }
                 }
             )
         }
@@ -377,7 +401,11 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun MainScreen(viewModel: MainViewModel, navController: NavHostController, mediaManager: ImageMediaManager) {
+fun MainScreen(
+    viewModel: MainViewModel,
+    navController: NavHostController,
+    mediaManager: ImageMediaManager
+) {
     // 1. 네비게이션 상태
     var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
 
@@ -418,19 +446,22 @@ fun MainScreen(viewModel: MainViewModel, navController: NavHostController, media
                             notificationTime = "18:00"
                         )
                     }
+
                     BottomNavItem.Memory.route -> {
                         // 새로 만든 갤러리 화면 연결
                         FourCutGalleryScreen(
-                             savedImages = savedFourCuts,
+                            savedImages = savedFourCuts,
                             onCreateClick = { isEditorOpen = true }, // 만들기 버튼 클릭
                             onDeleteRequest = { urisToDelete ->
                                 savedFourCuts.removeAll(urisToDelete)
                             }
                         )
                     }
+
                     BottomNavItem.Gallery.route -> {
                         GalleryScreen()
                     }
+
                     BottomNavItem.My.route -> {
                         MyScreenEntry(
                             mediaManager = mediaManager,
@@ -438,7 +469,7 @@ fun MainScreen(viewModel: MainViewModel, navController: NavHostController, media
                                 navController.navigate(Screen.KeywordSelect.route)
                             }
                         )
-                     }
+                    }
                 }
             }
         }

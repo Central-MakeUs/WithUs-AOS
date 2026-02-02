@@ -12,24 +12,37 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavHostController
 import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
 import com.widthus.app.model.OnboardingPage
 import com.widthus.app.model.ProfileLoadResult
+import com.widthus.app.screen.Screen
 import com.widthus.app.utils.PreferenceManager
 import com.withus.app.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.withus.app.model.ApiException
 import org.withus.app.model.CoupleQuestionData
+import org.withus.app.model.JoinCouplePreviewData
+import org.withus.app.model.JoinCoupleRequest
+import org.withus.app.model.ProfileSettingStatus
 import org.withus.app.model.UserAnswerInfo
 import org.withus.app.token.TokenManager
 import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
 import org.withus.app.remote.ApiService
+import java.io.IOException
 import javax.inject.Inject
 
 @HiltViewModel
@@ -39,6 +52,16 @@ class MainViewModel @Inject constructor(
     private val preferenceManager: PreferenceManager,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
+
+    private val _myCode = MutableStateFlow<String?>(null)
+    val myCode: StateFlow<String?> = _myCode.asStateFlow()
+
+    private val _loading = MutableStateFlow(false)
+    val loading: StateFlow<Boolean> = _loading.asStateFlow()
+
+    private val _error = MutableSharedFlow<String>()
+    val error: SharedFlow<String> = _error.asSharedFlow()
+
     var isOnboardingComplete by mutableStateOf(false)
         private set
     // 1단계: 닉네임
@@ -288,7 +311,7 @@ class MainViewModel @Inject constructor(
                         ProfileLoadResult.Success
                     } else {
                         Log.d("PROFILE", "프로필 데이터 없음 (온보딩 이동)")
-                        ProfileLoadResult.ToOnboarding
+                        ProfileLoadResult.Error("프로필 데이터 없음")
                     }
                 } else {
                     // 서버 내부 성공 플래그가 false인 경우 (예: 세션 만료 등)
@@ -298,7 +321,7 @@ class MainViewModel @Inject constructor(
             } else {
                 // HTTP 에러 (4xx, 5xx)
                 Log.d("PROFILE", "프로필 데이터 없음 (온보딩 이동)")
-                ProfileLoadResult.ToOnboarding
+                ProfileLoadResult.Error("HTTP 에러")
 
 //                val errorBody = response.errorBody()?.string()
 //                Log.e("PROFILE", "HTTP 에러: $errorBody")
@@ -309,6 +332,29 @@ class MainViewModel @Inject constructor(
             ProfileLoadResult.Error("네트워크 연결을 확인해 주세요.")
         }
     }
+
+    suspend fun fetchUserStatus(): Result<ProfileSettingStatus> {
+        return runCatching {
+            val response = apiService.getUserStatus()
+            if (!response.isSuccessful) {
+                val body = response.errorBody()?.string().orEmpty()
+                throw ApiException(response.code(), body.ifBlank { "HTTP ${response.code()}" })
+            }
+            val body = response.body() ?: throw ApiException(response.code(), "Empty body")
+            if (body.success != true || body.data == null) {
+                val msg = body.error?.message ?: "Unknown API error"
+                throw ApiException(response.code(), msg)
+            }
+            body.data!!.profileSettingStatus
+        }
+    }
+
+
+    suspend fun checkUserStatus(): ProfileSettingStatus {
+        // 성공이면 status 반환, 실패면 예외가 호출자에게 전달됨
+        return fetchUserStatus().getOrThrow()
+    }
+
 
     fun logout() {
     }
@@ -404,6 +450,75 @@ class MainViewModel @Inject constructor(
             true
         } catch (e: Exception) {
             false
+        }
+    }
+
+    // 1) 상태만 받아 네비게이션 수행
+    suspend fun navigateToNextScreenBasedOnStatus(
+        navController: NavHostController
+    ) {
+        when (checkUserStatus()) {
+            ProfileSettingStatus.NEED_USER_INITIAL_SETUP -> {
+                navController.navigate(Screen.Onboarding.route)
+            }
+            ProfileSettingStatus.NEED_COUPLE_CONNECT,
+            ProfileSettingStatus.NEED_COUPLE_INITIAL_SETUP -> {
+                // 둘 다 같은 화면으로 이동하므로 묶음 처리
+                navController.navigate(Screen.OnboardingConnect.route)
+            }
+            ProfileSettingStatus.COMPLETED -> {
+                navController.navigate(Screen.Home.route)
+            }
+        }
+    }
+
+    suspend fun joinCouple(inviteCode: String): Result<Long> = runCatching {
+        val resp = apiService.joinCouple(JoinCoupleRequest(inviteCode))
+        if (!resp.isSuccessful) throw ApiException(resp.code(), resp.errorBody()?.string().orEmpty())
+        val body = resp.body() ?: throw ApiException(resp.code(), "Empty body")
+        if (body.success != true || body.data == null) throw ApiException(resp.code(), body.error?.message ?: "Join failed")
+        body.data!!.coupleId
+    }
+
+    suspend fun previewJoinCouple(inviteCode: String): Result<JoinCouplePreviewData> = runCatching {
+        val resp = apiService.previewJoinCouple(JoinCoupleRequest(inviteCode))
+        if (!resp.isSuccessful) throw ApiException(resp.code(), resp.errorBody()?.string().orEmpty())
+        val body = resp.body() ?: throw ApiException(resp.code(), "Empty body")
+        if (body.success != true || body.data == null) throw ApiException(resp.code(), body.error?.message ?: "Preview failed")
+        
+        val data = body.data!!
+        data
+    }
+
+    suspend fun fetchInvitationCode(): Result<String> = runCatching {
+        val resp = apiService.createInvitationCode()
+        if (!resp.isSuccessful) {
+            val body = resp.errorBody()?.string().orEmpty()
+            throw ApiException(resp.code(), body.ifBlank { "HTTP ${resp.code()}" })
+        }
+        val body = resp.body() ?: throw ApiException(resp.code(), "Empty body")
+        if (body.success != true || body.data == null) {
+            throw ApiException(resp.code(), body.error?.message ?: "Failed to get invitation code")
+        }
+        body.data!!.invitationCode
+    }
+
+    fun loadInvitationCode() {
+        viewModelScope.launch {
+            _loading.value = true
+            fetchInvitationCode()
+                .onSuccess { code ->
+                    _myCode.value = code
+                }
+                .onFailure { throwable ->
+                    val message = when (throwable) {
+                        is ApiException -> throwable.message
+                        is IOException -> "네트워크 오류가 발생했습니다."
+                        else -> "알 수 없는 오류가 발생했습니다."
+                    }
+                    _error.emit(message)
+                }
+            _loading.value = false
         }
     }
 }

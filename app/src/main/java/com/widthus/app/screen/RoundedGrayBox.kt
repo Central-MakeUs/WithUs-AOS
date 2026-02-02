@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -100,6 +101,7 @@ import java.util.Calendar
 import kotlin.collections.getOrNull
 import com.withus.app.R
 import org.withus.app.debug
+import org.withus.app.model.JoinCouplePreviewData
 
 @Composable
 fun TestHomeScreen(
@@ -1207,8 +1209,13 @@ fun ConnectionPendingScreen(
 
 @Composable
 fun ConnectConfirmScreen(
-    viewModel: MainViewModel, onConfirmClick: () -> Unit, onLaterClick: () -> Unit
+    viewModel: MainViewModel, onConfirmClick: (String) -> Unit, onLaterClick: () -> Unit, navController: NavHostController
 ) {
+
+    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
+    val previewFlow = savedStateHandle ?.getStateFlow<JoinCouplePreviewData?>("join_preview", null)
+    val preview by previewFlow?.collectAsState() ?: remember { mutableStateOf(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1217,7 +1224,7 @@ fun ConnectConfirmScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            "${viewModel.nickname}님이\n ${viewModel.partnerNickname} 님을 초대했어요!",
+            "${preview?.senderName}님이\n ${preview?.receiverName} 님을 초대했어요!",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
@@ -1252,7 +1259,9 @@ fun ConnectConfirmScreen(
         Spacer(modifier = Modifier.height(60.dp))
 
         Button(
-            onClick = onConfirmClick,
+            onClick = {
+                onConfirmClick(preview!!.inviteCode)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -1360,10 +1369,14 @@ fun ConnectCompleteScreen(
 }
 
 @Composable
-fun InviteScreen(onBack: () -> Unit) {
+fun InviteScreen(onBack: () -> Unit, viewModel: MainViewModel) {
     var showCopyPopup by remember { mutableStateOf(false) }
-    val myCode = "99744211" // 서버에서 받아온 내 초대 코드 예시
     val context = LocalContext.current
+
+    val myCode by viewModel.myCode.collectAsState()
+    val loading by viewModel.loading.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.loadInvitationCode() }
 
     // 복사 완료 팝업 자동 사라짐 로직
     LaunchedEffect(showCopyPopup) {
@@ -1379,179 +1392,186 @@ fun InviteScreen(onBack: () -> Unit) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
             }
         }) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            Column(
+        if (loading) {
+            CircularProgressIndicator(modifier = Modifier.padding(top = 48.dp))
+        } else {
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(paddingValues)
             ) {
-                Spacer(modifier = Modifier.height(40.dp))
-                Text(
-                    text = "상대방에게 코드를\n공유해서 초대해 보세요",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
 
-                Spacer(modifier = Modifier.height(60.dp))
-
-                // 1. 내 코드를 밑줄 UI 위에 표시
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    myCode.forEach { char ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = char.toString(),
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            // 모든 숫자가 이미 존재하므로 검정색 밑줄 표시
-                            Box(
-                                modifier = Modifier
-                                    .width(24.dp)
-                                    .height(2.dp)
-                                    .background(Color.Black)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // 2. 코드 복사 버튼 (흰색 배경 + 검정 테두리)
-                Button(
-                    onClick = {
-                        val clipboard =
-                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Invite Code", myCode)
-                        clipboard.setPrimaryClip(clip)
-                        showCopyPopup = true
-                    },
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .border(1.dp, Color.Black, RoundedCornerShape(8.dp)),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(8.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_copy), // 복사 아이콘
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "코드 복사",
-                            color = Color.Black,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                    Spacer(modifier = Modifier.height(40.dp))
+                    Text(
+                        text = "상대방에게 코드를\n공유해서 초대해 보세요",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(60.dp))
 
-                // 3. 링크 공유 버튼 (검정 배경)
-                Button(
-                    onClick = {
-                        // 1. 공유할 텍스트 내용 작성
-
-                        val shareText =
-                            "[위더스] 상대방이 보낸 초대 코드: $myCode\n\n" + "아래 링크를 누르면 바로 연결 화면으로 이동해요!\n" + "widthus://connect?code=$myCode" // 👈 커스텀 스킴 적용
-
-                        // 2. 공유를 위한 인텐트 생성
-                        val sendIntent: Intent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, shareText) // 공유할 텍스트 삽입
-                            type = "text/plain" // 전송 데이터 타입 (일반 텍스트)
-                        }
-
-                        // 버튼 클릭 시 실행
-                        val defaultFeed = FeedTemplate(
-                            content = Content(
-                                title = "위더스(WITHÜS) 초대",
-                                description = "상대방이 보낸 초대 코드: $myCode",
-                                imageUrl = "https://your-image-url.com/logo.png", // 앱 로고나 대표 이미지 URL
-                                link = Link(androidExecutionParams = mapOf("invite_code" to myCode))
-                            ), buttons = listOf(
-                                Button(
-                                    "앱에서 연결하기",
-                                    Link(androidExecutionParams = mapOf("invite_code" to myCode))
+                    // 1. 내 코드를 밑줄 UI 위에 표시
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        myCode?.forEach { char ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = char.toString(),
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
                                 )
-                            )
-                        )
-
-                        // 카카오톡 설치 여부 확인 후 공유
-                        if (ShareClient.instance.isKakaoTalkSharingAvailable(context)) {
-                            ShareClient.instance.shareDefault(
-                                context, defaultFeed
-                            ) { sharingResult, error ->
-                                if (error != null) {
-                                    Log.e("KAKAO", "공유 실패", error)
-                                } else if (sharingResult != null) {
-                                    context.startActivity(sharingResult.intent)
-                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                // 모든 숫자가 이미 존재하므로 검정색 밑줄 표시
+                                Box(
+                                    modifier = Modifier
+                                        .width(24.dp)
+                                        .height(2.dp)
+                                        .background(Color.Black)
+                                )
                             }
                         }
+                    }
 
-                        // 3. 공유 선택창(Chooser) 띄우기
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // 2. 코드 복사 버튼 (흰색 배경 + 검정 테두리)
+                    Button(
+                        onClick = {
+                            val clipboard =
+                                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Invite Code", myCode)
+                            clipboard.setPrimaryClip(clip)
+                            showCopyPopup = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .border(1.dp, Color.Black, RoundedCornerShape(8.dp)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_copy), // 복사 아이콘
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "코드 복사",
+                                color = Color.Black,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 3. 링크 공유 버튼 (검정 배경)
+                    Button(
+                        onClick = {
+                            // 1. 공유할 텍스트 내용 작성
+
+                            val shareText =
+                                "[위더스] 상대방이 보낸 초대 코드: $myCode\n\n" + "아래 링크를 누르면 바로 연결 화면으로 이동해요!\n" + "widthus://connect?code=$myCode" // 👈 커스텀 스킴 적용
+
+                            // 2. 공유를 위한 인텐트 생성
+                            val sendIntent: Intent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, shareText) // 공유할 텍스트 삽입
+                                type = "text/plain" // 전송 데이터 타입 (일반 텍스트)
+                            }
+
+                            myCode?.let {
+                                // 버튼 클릭 시 실행
+                                val defaultFeed = FeedTemplate(
+                                    content = Content(
+                                        title = "위더스(WITHÜS) 초대",
+                                        description = "상대방이 보낸 초대 코드: $myCode",
+                                        imageUrl = "https://your-image-url.com/logo.png", // 앱 로고나 대표 이미지 URL
+                                        link = Link(androidExecutionParams = mapOf("invite_code" to it))
+                                    ), buttons = listOf(
+                                        Button(
+                                            "앱에서 연결하기",
+                                            Link(androidExecutionParams = mapOf("invite_code" to it))
+                                        )
+                                    )
+                                )
+
+                                // 카카오톡 설치 여부 확인 후 공유
+                                if (ShareClient.instance.isKakaoTalkSharingAvailable(context)) {
+                                    ShareClient.instance.shareDefault(
+                                        context, defaultFeed
+                                    ) { sharingResult, error ->
+                                        if (error != null) {
+                                            Log.e("KAKAO", "공유 실패", error)
+                                        } else if (sharingResult != null) {
+                                            context.startActivity(sharingResult.intent)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 3. 공유 선택창(Chooser) 띄우기
 //                        val shareIntent = Intent.createChooser(sendIntent, "초대 코드 공유하기")
 //                        context.startActivity(shareIntent)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
-                    shape = RoundedCornerShape(8.dp)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_share), // 공유 아이콘
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "링크 공유",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                // 4. 복사 완료 토스트 팝업 (중앙 위치)
+                AnimatedVisibility(
+                    visible = showCopyPopup,
+                    enter = fadeIn() + scaleIn(),
+                    exit = fadeOut() + scaleOut(),
+                    modifier = Modifier.align(Alignment.Center)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_share), // 공유 아이콘
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = Color.White.copy(alpha = 0.9f),
+                        shape = RoundedCornerShape(12.dp),
+                        shadowElevation = 8.dp
+                    ) {
                         Text(
-                            "링크 공유",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
+                            "코드가 성공적으로 복사되었어요!",
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                            fontSize = 14.sp,
+                            color = Color.Black
                         )
                     }
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // 4. 복사 완료 토스트 팝업 (중앙 위치)
-            AnimatedVisibility(
-                visible = showCopyPopup,
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut(),
-                modifier = Modifier.align(Alignment.Center)
-            ) {
-                Surface(
-                    color = Color.White.copy(alpha = 0.9f),
-                    shape = RoundedCornerShape(12.dp),
-                    shadowElevation = 8.dp
-                ) {
-                    Text(
-                        "코드가 성공적으로 복사되었어요!",
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                        fontSize = 14.sp,
-                        color = Color.Black
-                    )
                 }
             }
         }
