@@ -2,10 +2,14 @@ package org.withus.app.remote
 
 import okhttp3.RequestBody
 import org.withus.app.model.CommonResponse
+import org.withus.app.model.CoupleKeywordsData
 import org.withus.app.model.InvitationCodeData
 import org.withus.app.model.JoinCoupleData
 import org.withus.app.model.JoinCouplePreviewData
 import org.withus.app.model.JoinCoupleRequest
+import org.withus.app.model.KeywordListResponse
+import org.withus.app.model.KeywordUpdateRequest
+import org.withus.app.model.KeywordsData
 import org.withus.app.model.LoginResponse
 import org.withus.app.model.PresignedUrlData
 import org.withus.app.model.ProfileResponse
@@ -68,4 +72,27 @@ interface ApiService {
     ): Response<CommonResponse<JoinCouplePreviewData>>
 
     @POST("/api/me/user/invitation-codes") suspend fun createInvitationCode(): Response<CommonResponse<InvitationCodeData>>
+
+    /**
+     * 내 커플 키워드 목록 조회
+     */
+    @GET("/api/me/couple/keywords")
+    suspend fun getCoupleKeywords(): Response<CommonResponse<CoupleKeywordsData>>
+
+    /**
+     * 전체 키워드 목록 조회
+     */
+    @GET("/api/keywords")
+    suspend fun getAllKeywords(): Response<CommonResponse<KeywordsData>>
+
+    // 1. 디폴트 키워드 목록 가져오기
+    @GET("/api/keywords/default")
+    suspend fun getDefaultKeywords(): Response<CommonResponse<KeywordListResponse>>
+
+    // 2. 키워드 설정 저장하기 (PUT)
+    @PUT("/api/me/couple/keywords")
+    suspend fun updateCoupleKeywords(
+        @Body request: KeywordUpdateRequest
+    ): Response<CommonResponse<Unit>>
+
 }

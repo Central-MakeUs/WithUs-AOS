@@ -3,6 +3,7 @@ package com.widthus.app.screen
 import OnboardingConnectScreen
 import ProfileImageBottomSheet
 import ProfileImagePicker
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -754,6 +756,7 @@ fun LogoutConfirmDialog(onDismiss: () -> Unit, onLogout: () -> Unit) {
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileEditScreen(
@@ -765,7 +768,31 @@ fun ProfileEditScreen(
 ) {
     var showSheet by remember { mutableStateOf(false) }
 
-    // ✅ 모드에 따라 UI 텍스트 및 데이터 분기 처리
+    val loading by viewModel.loading.collectAsState()
+    val context = LocalContext.current
+
+    // 에러 토스트
+    LaunchedEffect(Unit) {
+        viewModel.error.collect { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // 업데이트 성공 시 처리 (예: 뒤로가기)
+    LaunchedEffect(Unit) {
+        viewModel.profileUpdated.collect {
+            Toast.makeText(context, "프로필이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+            onBack()
+        }
+    }
+
+    // 로딩 인디케이터
+    if (loading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    }
+
     val title = if (mode == EditMode.ME) "프로필 편집" else "커플 연결 정보"
     val nicknameValue = if (mode == EditMode.ME) viewModel.nickname else viewModel.partnerNickname
     val birthdayValue = if (mode == EditMode.ME) viewModel.birthdayValue else viewModel.partnerBirthdayValue
@@ -800,7 +827,7 @@ fun ProfileEditScreen(
             Spacer(modifier = Modifier.height(30.dp))
 
             ProfileImagePicker(
-                viewModel = viewModel,
+                uri = profileUri,
                 onImageClick = { if (mode == EditMode.ME) showSheet = true }
             )
 

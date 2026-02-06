@@ -35,6 +35,7 @@ import org.withus.app.model.ApiException
 import org.withus.app.model.CoupleQuestionData
 import org.withus.app.model.JoinCouplePreviewData
 import org.withus.app.model.JoinCoupleRequest
+import org.withus.app.model.KeywordUpdateRequest
 import org.withus.app.model.ProfileSettingStatus
 import org.withus.app.model.UserAnswerInfo
 import org.withus.app.token.TokenManager
@@ -42,16 +43,32 @@ import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
 import org.withus.app.remote.ApiService
+import org.withus.app.repository.ProfileRepository
 import java.io.IOException
 import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val apiService: ApiService,
+    private val profileRepository: ProfileRepository,
     private val tokenManager: TokenManager,
     private val preferenceManager: PreferenceManager,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
+
+    private val _profileUpdated = MutableSharedFlow<Unit>()
+    val profileUpdated: SharedFlow<Unit> = _profileUpdated.asSharedFlow()
+
+    // helper: "YYYYMMDD" 또는 "YYYY-MM-DD" -> "YYYY-MM-DD"
+    private fun formatBirthday(input: String): String {
+        val digits = input.filter { it.isDigit() }
+        return if (digits.length == 8) {
+            "${digits.substring(0,4)}-${digits.substring(4,6)}-${digits.substring(6,8)}"
+        } else {
+            // 이미 포맷되어 있거나 비어있으면 그대로 반환
+            input
+        }
+    }
 
     private val _myCode = MutableStateFlow<String?>(null)
     val myCode: StateFlow<String?> = _myCode.asStateFlow()
@@ -210,6 +227,7 @@ class MainViewModel @Inject constructor(
     suspend fun uploadProfileAndSave(isUpdate: Boolean): ProfileLoadResult {
         return try {
             val currentUri = profileImageUri ?: return ProfileLoadResult.Error("이미지가 선택되지 않았습니다.")
+            val contentType = context.contentResolver.getType(currentUri) ?: "image/jpeg"
 
             // 단계 1: Pre-signed URL 발급 받기
             val urlResponse = apiService.getPresignedUrl(PresignedUrlRequest("PROFILE"))
@@ -367,7 +385,48 @@ class MainViewModel @Inject constructor(
     }
 
     fun changeProfile() {
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                // 1) 이미지 업로드(있다면)
+                val imageKey: String? = profileImageUri?.let { uri ->
+                    // uploadImageAndGetKey returns Result<String>
+                    profileRepository.uploadImageAndGetKey(uri).getOrElse { throwable ->
+                        // 업로드 실패 시 예외 던지거나 null로 처리
+                        // 여기서는 에러로 처리
+                        throw throwable
+                    }
+                }
 
+                // 2) 프로필 요청 생성
+                val formattedBirthday = formatBirthday(birthdayValue.text)
+                val request = ProfileUpdateRequest(
+                    nickname = nickname,
+                    birthday = formattedBirthday,
+                    imageKey = imageKey
+                )
+
+                // 3) 서버에 업데이트
+                profileRepository.updateUserProfile(request).fold(
+                    onSuccess = {
+                        // 성공 처리: UI에 알림(예: 닫기, 토스트, 리프레시)
+                        _profileUpdated.emit(Unit)
+                    },
+                    onFailure = { throwable ->
+                        throw throwable
+                    }
+                )
+            } catch (e: Exception) {
+                val message = when (e) {
+                    is ApiException -> e.message
+                    is IOException -> "네트워크 오류가 발생했습니다."
+                    else -> e.message ?: "알 수 없는 오류가 발생했습니다."
+                }
+                _error.emit(message)
+            } finally {
+                _loading.value = false
+            }
+        }
     }
 
     fun completeOnboarding() {
@@ -519,6 +578,93 @@ class MainViewModel @Inject constructor(
                     _error.emit(message)
                 }
             _loading.value = false
+        }
+    }
+
+    // UI에 보여줄 전체 키워드 리스트 (디폴트 + 커스텀)
+    private val _displayKeywords = MutableStateFlow<List<String>>(emptyList())
+    val displayKeywords: StateFlow<List<String>> = _displayKeywords
+
+    // 서버에서 받은 디폴트 키워드 매핑용 (Content -> ID)
+    private var defaultKeywordMap = mapOf<String, Long>()
+
+    // 화면 진입 시 호출: 디폴트 키워드 로딩
+    fun loadDefaultKeywords() {
+        viewModelScope.launch {
+            try {
+                // Retrofit 인스턴스 (repository 패턴을 안 쓴다고 가정하고 직접 호출 예시)
+                val response = apiService.getDefaultKeywords()
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val list = response.body()?.data?.keywordInfoList ?: emptyList()
+
+                    // 1. 매핑 맵 생성 ("밥타임" -> 1, "출근길" -> 2 ...)
+                    defaultKeywordMap = list.associate { it.content to it.keywordId.toLong() }
+
+                    // 2. UI 표시용 리스트 업데이트 (순서대로 정렬)
+                    _displayKeywords.value = list.sortedBy { it.displayOrder }.map { it.content }
+                } else {
+                    Log.e("API", "키워드 로드 실패: ${response.errorBody()?.string()}")
+                }
+            } catch (e: Exception) {
+                Log.e("API", "키워드 로드 에러", e)
+            }
+        }
+    }
+
+    // "다음" 버튼 클릭 시 호출: 선택된 키워드 분류 및 업로드
+    fun saveKeywords(selectedKeywords: Set<String>, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val defaultIds = mutableListOf<Long>()
+                val customList = mutableListOf<String>()
+
+                // 선택된 키워드가 디폴트인지 커스텀인지 분류
+                selectedKeywords.forEach { keyword ->
+                    val id = defaultKeywordMap[keyword]
+                    if (id != null) {
+                        defaultIds.add(id)
+                    } else {
+                        customList.add(keyword)
+                    }
+                }
+
+                // 커스텀 키워드 리스트를 요청 포맷 문자열로 변환
+                // 예: "['산책', '맛집']" (작은따옴표 주의)
+                val customKeywordsString = if (customList.isEmpty()) {
+                    "[]"
+                } else {
+                    customList.joinToString(prefix = "['", separator = "', '", postfix = "']")
+                }
+
+                val request = KeywordUpdateRequest(
+                    defaultKeywordIds = defaultIds,
+                    customKeywords = customKeywordsString
+                )
+
+                // API 호출
+                val response = apiService.updateCoupleKeywords(request)
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    Log.d("API", "키워드 저장 성공")
+                    onResult(true)
+                } else {
+                    Log.e("API", "키워드 저장 실패: ${response.errorBody()?.string()}")
+                    onResult(false)
+                }
+            } catch (e: Exception) {
+                Log.e("API", "키워드 저장 에러", e)
+                onResult(false)
+            }
+        }
+    }
+
+    // 직접 추가한 키워드를 UI 목록에 반영하는 함수
+    fun addCustomKeywordToDisplay(newKeyword: String) {
+        val current = _displayKeywords.value.toMutableList()
+        if (!current.contains(newKeyword)) {
+            current.add(newKeyword)
+            _displayKeywords.value = current
         }
     }
 }

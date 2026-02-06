@@ -330,11 +330,12 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 
         composable(Screen.KeywordSelect.route) {
             KeywordSelectionScreen(
+                viewModel = viewModel,
                 onBackClick = {
                     navController.popBackStack()
                 },
-                onNextClick = { strings ->
-                    Log.d("TAG", "selected items : $strings")
+                onNextClick = {
+                    navController.popBackStack()
                 },
                 isMyPage = viewModel.isOnboardingComplete
             )
@@ -353,27 +354,32 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 
         composable(Screen.EnterCode.route) {
             EnterCodeScreen(
-                onBack = {
-                    if (viewModel.nickname.isNotEmpty()) {
-                        navController.navigate(Screen.OnboardingConnect.route)
-                    }
-                },
-                onConnect = {
+                onBack = { navController.popBackStack() },
+                onConnect = { code, onResult -> // code: 입력한 코드, onResult: 결과 콜백
                     coroutineScope.launch {
-                        // 미리보기
-                        viewModel.previewJoinCouple(it)
+                        viewModel.previewJoinCouple(code)
                             .onSuccess { preview ->
-                                // 현재(출발) 백스택 엔트리에 데이터 저장
+                                // 성공 시
                                 navController.currentBackStackEntry?.savedStateHandle?.set("join_preview", preview)
-                                // 목적지로 이동
                                 navController.navigate(Screen.ConnectConfirm.route)
-                            }
-                            .onFailure { /* 에러 처리 */ }
 
+                                // 성공 콜백 호출 (에러 없음)
+                                onResult(true, null)
+                            }
+                            .onFailure { error ->
+                                // 실패 시
+                                // 에러 메시지 추출 (예: "자기 자신을 초대할 수 없습니다.")
+                                // error가 커스텀 Exception이라면 message 프로퍼티 사용
+                                val message = error.message ?: "초대코드를 다시 확인해주세요."
+
+                                // 실패 콜백 호출 (에러 메시지 전달)
+                                onResult(false, message)
+                            }
                     }
                 }
             )
         }
+
 
         composable(Screen.Home.route) {
             MainScreen(viewModel, navController, mediaManager)
@@ -442,8 +448,11 @@ fun MainScreen(
                         HomeScreen(
                             viewModel = viewModel,
                             mediaManager = mediaManager,
-                            keywords = listOf("음식", "여행", "일상"),
-                            notificationTime = "18:00"
+//                            myKeywords = listOf("음식", "여행", "일상"),
+                            myKeywords = listOf(),
+                            onNavigateToKeywordSelect = {
+                                navController.navigate(Screen.KeywordSelect.route)
+                            }
                         )
                     }
 
