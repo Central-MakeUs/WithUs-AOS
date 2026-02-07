@@ -68,7 +68,7 @@ fun GalleryScreen(
     var selectedQuestionIndex by remember { mutableStateOf<Int?>(null) }
     var viewMode by remember { mutableStateOf(ViewMode.LATEST) }
     var isSelectionMode by remember { mutableStateOf(false) }
-    val selectedIds = remember { mutableStateListOf<Int>() } // ID를 Int(coupleQuestionId)로 관리
+    val selectedIds = remember { mutableStateListOf<Long>() } // ID를 Int(coupleQuestionId)로 관리
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     // ViewModel의 실제 데이터를 사용
@@ -208,9 +208,9 @@ fun ToggleOption(text: String, isSelected: Boolean, onClick: () -> Unit) {
 fun LatestGridView(
     items: List<CoupleQuestionData>,
     isSelectionMode: Boolean,
-    selectedIds: List<Int>,
-    onToggleSelect: (Int) -> Unit,
-    onLongClick: (Int) -> Unit,
+    selectedIds: List<Long>,
+    onToggleSelect: (Long) -> Unit,
+    onLongClick: (Long) -> Unit,
     onItemClick: (Int) -> Unit
 ) {
     LazyVerticalGrid(

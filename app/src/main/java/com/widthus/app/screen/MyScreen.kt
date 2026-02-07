@@ -85,35 +85,41 @@ fun MyScreenEntry(
         composable(MyRoute.DeleteWarning.route) {
             if (viewModel.deleteStep == 1) {
                 DeleteAccountWarningScreen(
+                    viewModel = viewModel,
                     onBack = { navController.popBackStack() },
-                    onNext = { viewModel.updateDeleteStep(2) } // 단계 업데이트
+                    onNext = { viewModel.updateDeleteStep(2) },
+                    onMoveDisconnect = {
+                        navController.navigate(MyRoute.Disconnect.route)
+                    }
                 )
             } else {
                 DeleteAccountReasonScreen(
+                    viewModel = viewModel,
                     onBack = { viewModel.updateDeleteStep(1) }, // 이전 단계로
-                    onConfirmDelete = { /* 최종 탈퇴 */ }
+                    onNavigateToLogin = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(MyRoute.Main.route) { inclusive = true }
+                        }
+                    }
                 )
             }
-
-            DeleteAccountWarningScreen(
-                onBack = { navController.popBackStack() },
-                onNext = { navController.navigate(MyRoute.DeleteReason.route) }
-            )
-        }
-        // 4. 회원 탈퇴 (사유 선택)
-        composable(MyRoute.DeleteReason.route) {
-            DeleteAccountReasonScreen(
-                onBack = { navController.popBackStack() }, // 유지하기
-                onConfirmDelete = {
-                    /* 실제 탈퇴 로직 후 로그인 화면 등으로 이동 */
-                }
-            )
         }
         // 5. 연결 해제
         composable(MyRoute.Disconnect.route) {
+            LaunchedEffect(viewModel.isDisconnectSuccess) {
+                if (viewModel.isDisconnectSuccess) {
+                    navController.navigate(Screen.OnboardingConnect.route) {
+                        popUpTo(MyRoute.Main.route) { inclusive = true }
+                    }
+                    viewModel.resetDisconnectStatus()
+                }
+            }
+
             DisconnectScreen(
-                onBack = { navController.popBackStack() }, // 유지하기
-                onConfirmDisconnect = { /* 연결 해제 로직 */ }
+                onBack = { navController.popBackStack() },
+                onConfirmDisconnect = {
+                    viewModel.terminateCouple()
+                }
             )
         }
 
@@ -289,7 +295,7 @@ fun AccountManagementScreen(
 // =================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeleteAccountWarningScreen(onBack: () -> Unit, onNext: () -> Unit) {
+fun DeleteAccountWarningScreen(viewModel: MainViewModel, onBack: () -> Unit, onNext: () -> Unit, onMoveDisconnect: () -> Unit) {
     var isChecked by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
@@ -302,7 +308,7 @@ fun DeleteAccountWarningScreen(onBack: () -> Unit, onNext: () -> Unit) {
                 showConfirmDialog = false
             }
         ) {
-            onNext()
+            onMoveDisconnect()
         }
     }
     Scaffold(
@@ -392,7 +398,11 @@ fun DeleteAccountWarningScreen(onBack: () -> Unit, onNext: () -> Unit) {
                 }
                 Button(
                     onClick = {
-                        showConfirmDialog = true
+                        if (viewModel.isConnect) {
+                            onNext()
+                        } else {
+                            showConfirmDialog = true
+                        }
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -415,7 +425,7 @@ fun DeleteAccountWarningScreen(onBack: () -> Unit, onNext: () -> Unit) {
 // =================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeleteAccountReasonScreen(onBack: () -> Unit, onConfirmDelete: () -> Unit) {
+fun DeleteAccountReasonScreen(viewModel: MainViewModel, onBack: () -> Unit, onNavigateToLogin: () -> Unit) {
     val reasons = listOf(
         "앱을 자주 사용하지 않아요",
         "사용 방법이 복잡하거나 불편했어요",
@@ -424,6 +434,12 @@ fun DeleteAccountReasonScreen(onBack: () -> Unit, onConfirmDelete: () -> Unit) {
         "기타"
     )
     var selectedReason by remember { mutableStateOf("") }
+
+    LaunchedEffect(viewModel.isDeleteAccountSuccess) {
+        if (viewModel.isDeleteAccountSuccess) {
+            onNavigateToLogin()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -487,7 +503,9 @@ fun DeleteAccountReasonScreen(onBack: () -> Unit, onConfirmDelete: () -> Unit) {
                     Text("유지하기")
                 }
                 Button(
-                    onClick = onConfirmDelete,
+                    onClick = {
+                        viewModel.deleteAccount()
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .height(50.dp),

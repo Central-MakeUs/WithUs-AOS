@@ -38,3 +38,6 @@ data class KeywordUpdateRequest(
     @SerializedName("customKeywords")
     val customKeywords: String
 )
+
+
+data class DailyImageRequest(val imageKey: String)

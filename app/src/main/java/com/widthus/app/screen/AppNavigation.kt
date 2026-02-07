@@ -86,8 +86,9 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
     NavHost(
         navController = navController,
 //        startDestination = Screen.Onboarding.route
-        startDestination = Screen.Login.route
+//        startDestination = Screen.Login.route
 //        startDestination = Screen.Home.route
+        startDestination = Screen.Home.route
 //        startDestination = Screen.Gallery.route
 //        startDestination = Screen.PhotoFlow.route
     ) {
@@ -448,8 +449,8 @@ fun MainScreen(
                         HomeScreen(
                             viewModel = viewModel,
                             mediaManager = mediaManager,
-//                            myKeywords = listOf("음식", "여행", "일상"),
-                            myKeywords = listOf(),
+                            myKeywords = listOf("음식", "여행", "일상"),
+//                            myKeywords = listOf(),
                             onNavigateToKeywordSelect = {
                                 navController.navigate(Screen.KeywordSelect.route)
                             }

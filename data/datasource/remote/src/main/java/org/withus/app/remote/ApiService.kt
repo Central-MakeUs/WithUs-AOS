@@ -3,6 +3,8 @@ package org.withus.app.remote
 import okhttp3.RequestBody
 import org.withus.app.model.CommonResponse
 import org.withus.app.model.CoupleKeywordsData
+import org.withus.app.model.CoupleQuestionData
+import org.withus.app.model.DailyImageRequest
 import org.withus.app.model.InvitationCodeData
 import org.withus.app.model.JoinCoupleData
 import org.withus.app.model.JoinCouplePreviewData
@@ -13,12 +15,14 @@ import org.withus.app.model.KeywordsData
 import org.withus.app.model.LoginResponse
 import org.withus.app.model.PresignedUrlData
 import org.withus.app.model.ProfileResponse
+import org.withus.app.model.QuestionImageRequest
 import org.withus.app.model.StatusData
 import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -94,5 +98,40 @@ interface ApiService {
     suspend fun updateCoupleKeywords(
         @Body request: KeywordUpdateRequest
     ): Response<CommonResponse<Unit>>
+
+    @POST("/api/users/{userId}/poke")
+    suspend fun pokeUser(
+        @Path("userId") userId: Long
+    ): Response<CommonResponse<Unit>>
+
+    @GET("/api/me/couple/questions/{coupleQuestionId}/image")
+    suspend fun getTodayQuestion(
+        @Path("coupleQuestionId") coupleQuestionId: String // 초기 호출 시 "current" 등으로 보낼 수 있음
+    ): Response<CommonResponse<CoupleQuestionData>>
+
+    // 2. 오늘의 질문 사진 업로드
+    @POST("/api/me/couple/questions/{coupleQuestionId}/image")
+    suspend fun uploadQuestionImage(
+        @Path("coupleQuestionId") coupleQuestionId: Long,
+        @Body request: QuestionImageRequest // imageKey가 포함된 바디 추가
+    ): Response<CommonResponse<Unit>>
+
+    @GET("/api/me/couple/keywords/{coupleKeywordId}/today")
+    suspend fun getTodayDaily(
+        @Path("coupleKeywordId") coupleKeywordId: Long
+    ): Response<CommonResponse<CoupleQuestionData>> // 응답 구조가 질문과 같으므로 모델 재사용
+
+    // 2. 오늘의 일상 이미지 업로드 (ImageKey 전달)
+    @POST("/api/me/couple/keywords/{coupleKeywordId}/today/image")
+    suspend fun uploadDailyImage(
+        @Path("coupleKeywordId") coupleKeywordId: Long,
+        @Body request: DailyImageRequest
+    ): Response<CommonResponse<Unit>>
+
+    @DELETE("/api/users/me")
+    suspend fun deleteAccount(): Response<CommonResponse<Unit>>
+
+    @POST("/api/me/couple/terminate")
+    suspend fun terminateCouple(): Response<CommonResponse<Unit>>
 
 }

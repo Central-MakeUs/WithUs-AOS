@@ -35,6 +35,7 @@ import org.withus.app.model.ApiException
 import org.withus.app.model.CoupleQuestionData
 import org.withus.app.model.JoinCouplePreviewData
 import org.withus.app.model.JoinCoupleRequest
+import org.withus.app.model.KeywordInfo
 import org.withus.app.model.KeywordUpdateRequest
 import org.withus.app.model.ProfileSettingStatus
 import org.withus.app.model.UserAnswerInfo
@@ -43,14 +44,21 @@ import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
 import org.withus.app.remote.ApiService
+import org.withus.app.repository.CoupleRepository
+import org.withus.app.repository.DailyRepository
 import org.withus.app.repository.ProfileRepository
+import org.withus.app.repository.UserRepository
 import java.io.IOException
+import java.time.LocalDate
 import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val apiService: ApiService,
     private val profileRepository: ProfileRepository,
+    private val dailyRepository: DailyRepository,
+    private val userRepository: UserRepository,
+    private val coupleRepository: CoupleRepository,
     private val tokenManager: TokenManager,
     private val preferenceManager: PreferenceManager,
     @ApplicationContext private val context: Context,
@@ -58,6 +66,9 @@ class MainViewModel @Inject constructor(
 
     private val _profileUpdated = MutableSharedFlow<Unit>()
     val profileUpdated: SharedFlow<Unit> = _profileUpdated.asSharedFlow()
+
+    var isDisconnectSuccess by mutableStateOf(false)
+        private set
 
     // helper: "YYYYMMDD" 또는 "YYYY-MM-DD" -> "YYYY-MM-DD"
     private fun formatBirthday(input: String): String {
@@ -68,6 +79,23 @@ class MainViewModel @Inject constructor(
             // 이미 포맷되어 있거나 비어있으면 그대로 반환
             input
         }
+    }
+
+    fun terminateCouple() {
+        viewModelScope.launch {
+            coupleRepository.terminateCouple()
+                .onSuccess {
+                    isDisconnectSuccess = true
+                }
+                .onFailure { error ->
+                    Log.e("TERMINATE", "실패: ${error.message}")
+                    // 에러 팝업이나 토스트 메시지 처리
+                }
+        }
+    }
+
+    fun resetDisconnectStatus() {
+        isDisconnectSuccess = false
     }
 
     private val _myCode = MutableStateFlow<String?>(null)
@@ -88,6 +116,24 @@ class MainViewModel @Inject constructor(
 
     var partnerNickname by mutableStateOf("쏘피") // 파트너 이름
         private set
+
+    // 탈퇴 성공 여부를 알리는 이벤트 (UI에서 관찰하여 로그아웃 처리)
+    var isDeleteAccountSuccess by mutableStateOf(false)
+        private set
+
+    fun deleteAccount() {
+        viewModelScope.launch {
+            userRepository.deleteAccount()
+                .onSuccess {
+                    // 탈퇴 성공
+                    isDeleteAccountSuccess = true
+                }
+                .onFailure { error ->
+                    // 에러 발생 시 토스트 메시지 등을 위한 처리
+                    Log.e("DELETE_ACCOUNT", "실패: ${error.message}")
+                }
+        }
+    }
 
     private val _memorySets = mutableStateListOf<CoupleQuestionData>()
     val memorySets: List<CoupleQuestionData> = _memorySets
@@ -151,10 +197,16 @@ class MainViewModel @Inject constructor(
     // 4단계: 프로필 이미지 URI
     var profileImageUri by mutableStateOf<Uri?>(null)
 
-    var userUploadedImage by mutableStateOf<Uri?>(null)
+//    var userUploadedImage by mutableStateOf<Uri?>(null)
+    var userUploadedImage by mutableStateOf<Uri?>(
+        Uri.parse("https://img1.daumcdn.net/thumb/R1280x0.fjpg/?fname=http://t1.daumcdn.net/brunch/service/user/1dEO/image/CIieqAqy0KlR6UdFHxrc1NsGtVM.jpg")
+    )
 
+//    var partnerUploadedImage by mutableStateOf<Uri?>(
+//        Uri.parse("https://img1.daumcdn.net/thumb/R1280x0.fjpg/?fname=http://t1.daumcdn.net/brunch/service/user/1dEO/image/CIieqAqy0KlR6UdFHxrc1NsGtVM.jpg")
+//    )
     var partnerUploadedImage by mutableStateOf<Uri?>(null)
-
+//
     fun updateProfileImage(uri: Uri?) {
         profileImageUri = uri
     }
@@ -505,7 +557,7 @@ class MainViewModel @Inject constructor(
             val day = dateStr.substring(6, 8).toInt()
 
             // LocalDate.of에서 유효하지 않은 날짜(예: 13월, 32일 등)일 경우 Exception이 발생합니다.
-            java.time.LocalDate.of(year, month, day)
+            LocalDate.of(year, month, day)
             true
         } catch (e: Exception) {
             false
@@ -526,6 +578,7 @@ class MainViewModel @Inject constructor(
                 navController.navigate(Screen.OnboardingConnect.route)
             }
             ProfileSettingStatus.COMPLETED -> {
+                isConnect = true
                 navController.navigate(Screen.Home.route)
             }
         }
@@ -582,29 +635,40 @@ class MainViewModel @Inject constructor(
     }
 
     // UI에 보여줄 전체 키워드 리스트 (디폴트 + 커스텀)
-    private val _displayKeywords = MutableStateFlow<List<String>>(emptyList())
-    val displayKeywords: StateFlow<List<String>> = _displayKeywords
+    private val _displayKeywords = MutableStateFlow<List<KeywordInfo>>(emptyList())
+    val displayKeywords: StateFlow<List<KeywordInfo>> = _displayKeywords
+
+    var selectedKeywordId by mutableStateOf<Long?>(null)
+        private set
+    fun selectKeyword(id: Long) {
+        selectedKeywordId = id
+        fetchDailyData(id) // 해당 ID의 일상 데이터를 가져오는 API 호출
+    }
 
     // 서버에서 받은 디폴트 키워드 매핑용 (Content -> ID)
     private var defaultKeywordMap = mapOf<String, Long>()
 
     // 화면 진입 시 호출: 디폴트 키워드 로딩
+    // 1. 키워드 로드 함수 수정
     fun loadDefaultKeywords() {
         viewModelScope.launch {
             try {
-                // Retrofit 인스턴스 (repository 패턴을 안 쓴다고 가정하고 직접 호출 예시)
                 val response = apiService.getDefaultKeywords()
 
                 if (response.isSuccessful && response.body()?.success == true) {
                     val list = response.body()?.data?.keywordInfoList ?: emptyList()
 
-                    // 1. 매핑 맵 생성 ("밥타임" -> 1, "출근길" -> 2 ...)
+                    // 매핑 맵 생성
                     defaultKeywordMap = list.associate { it.content to it.keywordId.toLong() }
 
-                    // 2. UI 표시용 리스트 업데이트 (순서대로 정렬)
-                    _displayKeywords.value = list.sortedBy { it.displayOrder }.map { it.content }
-                } else {
-                    Log.e("API", "키워드 로드 실패: ${response.errorBody()?.string()}")
+                    // UI 리스트 업데이트 (정렬)
+                    val sortedList = list.sortedBy { it.displayOrder }
+                    _displayKeywords.value = sortedList
+
+                    // [추가] 리스트가 비어있지 않다면 첫 번째 키워드를 자동으로 선택
+                    if (sortedList.isNotEmpty() && selectedKeywordId == null) {
+                        selectKeyword(sortedList.first().keywordId.toLong())
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("API", "키워드 로드 에러", e)
@@ -662,9 +726,91 @@ class MainViewModel @Inject constructor(
     // 직접 추가한 키워드를 UI 목록에 반영하는 함수
     fun addCustomKeywordToDisplay(newKeyword: String) {
         val current = _displayKeywords.value.toMutableList()
-        if (!current.contains(newKeyword)) {
-            current.add(newKeyword)
-            _displayKeywords.value = current
+        // todo key word 추가
+        current.add(KeywordInfo(
+            keywordId = 0,
+            content = newKeyword,
+            displayOrder = 0,
+        ))
+        _displayKeywords.value = current
+    }
+
+    var showPokeSuccessDialog by mutableStateOf(false)
+        private set
+
+    fun pokePartner() {
+        viewModelScope.launch {
+            try {
+                val response = apiService.pokeUser(questionData!!.partnerInfo.userId)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    // 콕 찌르기 성공 시 다이얼로그 띄움
+                    showPokeSuccessDialog = true
+                } else {
+                    // 에러 처리 로직
+                }
+            } catch (e: Exception) {
+                // 네트워크 에러 처리
+            }
+        }
+    }
+
+    fun dismissPokeDialog() {
+        showPokeSuccessDialog = false
+    }
+
+    var questionData by mutableStateOf<CoupleQuestionData?>(null)
+        private set
+
+    // 질문 조회 로직
+    fun fetchTodayQuestion() {
+        viewModelScope.launch {
+            try {
+                // 경로상의 ID를 모를 때는 "current" 혹은 서버 약속된 값을 사용
+                val response = apiService.getTodayQuestion("current")
+                if (response.isSuccessful) {
+                    questionData = response.body()?.data
+                }
+            } catch (e: Exception) { /* 에러 처리 */ }
+        }
+    }
+
+    // 2. 사진 서버 업로드 함수
+    fun uploadImage(uri: Uri) {
+        val questionId = questionData?.coupleQuestionId ?: return
+
+        viewModelScope.launch {
+            try {
+                // 수정된 로직: S3 업로드 후 서버에 imageKey 전달
+                val result = dailyRepository.uploadQuestionPhoto(questionId, uri)
+
+                result.onSuccess {
+                    // 업로드 성공 후 화면 갱신을 위해 데이터 다시 로드
+                    fetchTodayQuestion()
+                }.onFailure {
+                    // 에러 알림 등 처리
+                }
+            } catch (e: Exception) { /* 에러 처리 */ }
+        }
+    }
+
+    var dailyData by mutableStateOf<CoupleQuestionData?>(null)
+        private set
+
+    // 키워드 탭 클릭 시 호출
+    fun fetchDailyData(coupleKeywordId: Long) {
+        viewModelScope.launch {
+            dailyRepository.getTodayDaily(coupleKeywordId)
+                .onSuccess { dailyData = it }
+        }
+    }
+
+    // 오늘의 일상 사진 업로드
+    fun uploadDailyImage(uri: Uri) {
+        val id = selectedKeywordId ?: return
+        viewModelScope.launch {
+            dailyRepository.uploadDailyPhoto(id, uri).onSuccess {
+                fetchDailyData(id) // 업로드 성공 후 화면 갱신을 위해 데이터 재조회
+            }
         }
     }
 }

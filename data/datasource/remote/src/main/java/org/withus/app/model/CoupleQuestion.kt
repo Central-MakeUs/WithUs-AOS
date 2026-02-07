@@ -8,7 +8,7 @@ data class CoupleQuestionResponse(
 )
 
 data class CoupleQuestionData(
-    val coupleQuestionId: Int,
+    val coupleQuestionId: Long,
     val question: String,
     val myInfo: UserAnswerInfo,
     val partnerInfo: UserAnswerInfo,
@@ -16,9 +16,21 @@ data class CoupleQuestionData(
 )
 
 data class UserAnswerInfo(
-    val userId: Int,
+    val userId: Long,
     val name: String,
     val profileThumbnailImageUrl: String,
     val questionImageUrl: String,
     val answeredAt: String // "20:30" 형태
+)
+
+data class QuestionUserInfo(
+    val userId: Long,
+    val name: String,
+    val profileThumbnailImageUrl: String?,
+    val questionImageUrl: String?,
+    val answeredAt: String?
+)
+
+data class QuestionImageRequest(
+    val imageKey: String
 )
