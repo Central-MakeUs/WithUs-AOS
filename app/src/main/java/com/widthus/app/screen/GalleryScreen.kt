@@ -1,7 +1,14 @@
 package com.widthus.app.screen
 
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -22,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -31,31 +40,39 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.widthus.app.model.MemorySet
 import com.widthus.app.model.QuestionAnswer
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
+import kotlinx.coroutines.launch
+import org.withus.app.model.ArchiveQuestionItem
+import org.withus.app.model.CalendarDayInfo
 import org.withus.app.model.CoupleQuestionData
+import org.withus.app.model.QuestionDetailResponse
 import org.withus.app.model.UserAnswerInfo
+import java.io.File
+import java.io.FileOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-
-// --- 데이터 모델 (예시) ---
-data class MemoryItem(
-    val id: String, val uri: Uri, // 실제로는 Uri 사용, 테스트에선 null 가능
-    val date: LocalDate
-)
 
 enum class ViewMode { LATEST, CALENDAR, QUESTION }
 
@@ -71,69 +88,112 @@ fun GalleryScreen(
     val selectedIds = remember { mutableStateListOf<Long>() } // ID를 Int(coupleQuestionId)로 관리
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // ViewModel의 실제 데이터를 사용
-    val displayItems = viewModel.memorySets
+    LaunchedEffect(viewMode) {
+        when (viewMode) {
+            ViewMode.LATEST -> {
+                if (viewModel.archiveItems.isEmpty()) viewModel.fetchArchives(true)
+            }
 
-    if (selectedQuestionIndex != null) {
-        // 상세 화면 표시
-        QuestionDetailScreen(
-            response = displayItems[selectedQuestionIndex!!],
-            onBack = { selectedQuestionIndex = null },
-            onDelete = { /* 삭제 로직 수행 */ }
-        )
+            ViewMode.QUESTION -> {
+                if (viewModel.archiveQuestions.isEmpty()) viewModel.fetchQuestionArchives(true)
+            }
+
+            ViewMode.CALENDAR -> {
+                val date = viewModel.currentCalendarDate
+                viewModel.fetchCalendar(date.year, date.monthValue)
+            }
+        }
+    }
+
+    val detailData = viewModel.selectedQuestionDetail
+    if (selectedQuestionIndex != null && detailData != null) {
+        QuestionDetailScreen(data = detailData, onBack = {
+            selectedQuestionIndex = null
+            // 상세 데이터 초기화 로직이 필요하다면 viewModel에서 처리
+        }, onDelete = {
+            // 삭제 API 연결
+            showDeleteDialog = true
+        })
     } else {
-        Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
-            Scaffold(
-                topBar = {
-                    Column(modifier = Modifier.background(Color.White)) {
-                        CenterAlignedTopAppBar(
-                            title = { Text("추억", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-                            actions = {
-                                if (!isSelectionMode) {
-                                    IconButton(onClick = { isSelectionMode = true }) {
-                                        Icon(Icons.Default.MoreHoriz, "더보기", tint = Color.Black)
-                                    }
-                                } else {
-                                    TextButton(onClick = {
-                                        isSelectionMode = false
-                                        selectedIds.clear()
-                                    }) { Text("취소", color = Color.Black) }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+        ) {
+            Scaffold(topBar = {
+                Column(modifier = Modifier.background(Color.White)) {
+                    CenterAlignedTopAppBar(
+                        title = { Text("추억", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                        actions = {
+                            if (!isSelectionMode) {
+                                IconButton(onClick = { isSelectionMode = true }) {
+                                    Icon(Icons.Default.MoreHoriz, "더보기", tint = Color.Black)
                                 }
-                            },
-                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
-                        )
+                            } else {
+                                TextButton(onClick = {
+                                    isSelectionMode = false
+                                    selectedIds.clear()
+                                }) { Text("취소", color = Color.Black) }
+                            }
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
+                    )
 
-                        if (!isSelectionMode) {
-                            Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), contentAlignment = Alignment.Center) {
-                                ViewModeToggle(currentMode = viewMode, onModeChanged = { viewMode = it })
-                            }
-                        }
-                    }
-                },
-                bottomBar = {
-                    if (isSelectionMode) {
-                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding()) {
-                            Button(
-                                onClick = { showDeleteDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
-                                enabled = selectedIds.isNotEmpty()
-                            ) {
-                                Text("${selectedIds.size}장의 사진 삭제하기", fontWeight = FontWeight.Bold, color = Color.White)
-                            }
+                    if (!isSelectionMode) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ViewModeToggle(
+                                currentMode = viewMode, onModeChanged = { viewMode = it })
                         }
                     }
                 }
-            ) { paddingValues ->
-                Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
+            }, bottomBar = {
+                if (isSelectionMode) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .navigationBarsPadding()
+                    ) {
+                        Button(
+                            onClick = { showDeleteDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(
+                                    0xFF222222
+                                )
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            enabled = selectedIds.isNotEmpty()
+                        ) {
+                            Text(
+                                "${selectedIds.size}장의 사진 삭제하기",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }) { paddingValues ->
+                Column(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize()
+                ) {
                     when (viewMode) {
                         ViewMode.LATEST -> {
                             LatestGridView(
-                                items = displayItems,
+                                items = viewModel.archiveItems, // (String, UserAnswerInfo) 페어 리스트
                                 isSelectionMode = isSelectionMode,
                                 selectedIds = selectedIds,
                                 onToggleSelect = { id ->
+                                    // 선택 로직: 리스트에 있으면 제거, 없으면 추가
                                     if (selectedIds.contains(id)) selectedIds.remove(id)
                                     else selectedIds.add(id)
                                 },
@@ -143,20 +203,31 @@ fun GalleryScreen(
                                         selectedIds.add(id)
                                     }
                                 },
-                                onItemClick = { index -> selectedQuestionIndex = index }
-                            )
+                                onItemClick = { index ->
+                                    selectedQuestionIndex = index
+                                },
+                                loadMore = {
+                                    viewModel.fetchArchives() // 스크롤 하단 도달 시 추가 데이터 로드
+                                })
                         }
+
                         ViewMode.CALENDAR -> {
                             CalendarListView(
-                                items = displayItems,
-                                onItemClick = { index -> selectedQuestionIndex = index }
-                            )
+                                viewModel = viewModel, onDateClick = {
+                                    selectedQuestionIndex = 0
+                                })
                         }
+
                         ViewMode.QUESTION -> {
                             QuestionListView(
-                                memorySets = displayItems,
-                                onQuestionClick = { index -> selectedQuestionIndex = index }
-                            )
+                                questions = viewModel.archiveQuestions,
+                                onQuestionClick = { index, item ->
+                                    // 상세 API 호출
+                                    viewModel.fetchQuestionDetail(item.coupleQuestionId)
+                                    // 화면 전환 상태 업데이트
+                                    selectedQuestionIndex = index
+                                },
+                                loadMore = { viewModel.fetchQuestionArchives() })
                         }
                     }
                 }
@@ -206,12 +277,13 @@ fun ToggleOption(text: String, isSelected: Boolean, onClick: () -> Unit) {
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun LatestGridView(
-    items: List<CoupleQuestionData>,
+    items: List<Pair<String, UserAnswerInfo>>, // 변경된 타입
     isSelectionMode: Boolean,
     selectedIds: List<Long>,
     onToggleSelect: (Long) -> Unit,
     onLongClick: (Long) -> Unit,
-    onItemClick: (Int) -> Unit
+    onItemClick: (Int) -> Unit,
+    loadMore: () -> Unit // 페이지네이션 콜백 추가
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
@@ -220,37 +292,63 @@ fun LatestGridView(
         verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         itemsIndexed(items) { index, item ->
-            Box(
-                modifier = Modifier
-                    .aspectRatio(3f / 4f)
-                    .combinedClickable(
-                        onClick = {
-                            if (isSelectionMode) onToggleSelect(item.coupleQuestionId)
-                            else onItemClick(index)
-                        },
-                        onLongClick = { onLongClick(item.coupleQuestionId) }
-                    )
-            ) {
+            // [페이지네이션] 리스트 끝에 도달하면 다음 페이지 요청
+            if (index >= items.size - 1) {
+                LaunchedEffect(Unit) { loadMore() }
+            }
+
+            val dateString = item.first // "2026-01-28"
+            val info = item.second     // 이미지 정보
+
+            val itemId = info.userId.toLong() // 임시 식별자
+
+            Box(modifier = Modifier
+                .aspectRatio(3f / 4f)
+                .combinedClickable(onClick = {
+                    if (isSelectionMode) onToggleSelect(itemId)
+                    else onItemClick(index)
+                }, onLongClick = { onLongClick(itemId) })) {
+                // 이미지 표시
                 AsyncImage(
-                    model = item.myInfo.questionImageUrl, // 대표 이미지로 내 사진 표시
+                    model = info.questionImageUrl,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
 
-                // 날짜 배지
-                Box(
-                    modifier = Modifier.padding(8.dp).align(Alignment.TopStart)
-                        .background(Color.White, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(text = item.date.format(DateTimeFormatter.ofPattern("M월 d일")), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                // 날짜 배지 표시 (예: 1월 28일)
+                val formattedDate = remember(dateString) {
+                    try {
+                        val date = LocalDate.parse(dateString)
+                        "${date.monthValue}월 ${date.dayOfMonth}일"
+                    } catch (e: Exception) {
+                        dateString
+                    }
                 }
 
-                if (isSelectionMode) {
-                    val isSelected = selectedIds.contains(item.coupleQuestionId)
-                    Box(modifier = Modifier.fillMaxSize().background(if (isSelected) Color.Black.copy(0.3f) else Color.Transparent))
+                Box(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .align(Alignment.TopStart)
+                        .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = formattedDate,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
 
+                // 선택 모드 UI (기존과 동일)
+                if (isSelectionMode) {
+                    val isSelected = selectedIds.contains(itemId)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(if (isSelected) Color.Black.copy(0.3f) else Color.Transparent)
+                    )
                     // 체크박스 (우측 상단)
                     Box(
                         modifier = Modifier
@@ -286,25 +384,62 @@ fun LatestGridView(
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CalendarListView(
-    items: List<CoupleQuestionData>,
-    onItemClick: (Int) -> Unit
+    viewModel: MainViewModel, onDateClick: (String) -> Unit
 ) {
-    val grouped = remember(items) { items.groupBy { it.date.year to it.date.monthValue } }
+    val calendarData = viewModel.calendarDays
+    val viewDate = viewModel.currentCalendarDate
+
+    // 핵심: viewDate(년/월)가 바뀔 때마다 서버 API 호출
+    LaunchedEffect(viewDate.year, viewDate.monthValue) {
+        viewModel.fetchCalendar(viewDate.year, viewDate.monthValue)
+    }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Color(0xFFF7F7F7)),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF7F7F7)),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp)
     ) {
-        grouped.forEach { (key, monthItems) ->
-            item {
-                Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp)) {
-                        Text(text = "${key.first}년 ${key.second}월", modifier = Modifier.align(Alignment.CenterHorizontally), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Spacer(modifier = Modifier.height(24.dp))
-                        // 요일 헤더...
-                        MonthCalendarGrid(key.first, key.second, monthItems, items, onItemClick)
+        item {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp)) {
+                    // --- 캘린더 헤더 (월 변경 컨트롤) ---
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { viewModel.updateCalendarMonth(-1) }) {
+                            Icon(Icons.Default.ChevronLeft, contentDescription = "이전 달")
+                        }
+
+                        Text(
+                            text = "${viewDate.year}년 ${viewDate.monthValue}월",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+
+                        IconButton(onClick = { viewModel.updateCalendarMonth(1) }) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = "다음 달")
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // --- 캘린더 그리드 ---
+                    MonthCalendarGrid(
+                        year = viewDate.year,
+                        month = viewDate.monthValue,
+                        calendarDays = calendarData,
+                        onDayClick = { clickedDate ->
+                            // 상세 조회 API 호출 후 화면 이동
+                            viewModel.fetchDetail(clickedDate)
+                            onDateClick(clickedDate)
+                        })
                 }
             }
         }
@@ -375,61 +510,62 @@ fun DeleteConfirmDialog(
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun MonthCalendarGrid(
-    year: Int,
-    month: Int,
-    monthItems: List<CoupleQuestionData>, // 현재 달의 데이터들
-    allItems: List<CoupleQuestionData>,  // 전체 리스트 (인덱스 추출용)
-    onItemClick: (Int) -> Unit            // 상세 화면 이동 콜백
+    year: Int, month: Int, calendarDays: List<CalendarDayInfo>, // 서버에서 받아온 해당 월의 데이터 리스트
+    onDayClick: (String) -> Unit        // 날짜(YYYY-MM-DD)를 인자로 상세 페이지 이동
 ) {
     val firstDay = LocalDate.of(year, month, 1)
     val daysInMonth = firstDay.lengthOfMonth()
-
-    // 일요일 시작 기준 오프셋 (일:0, 월:1 ...)
     val startOffset = firstDay.dayOfWeek.value % 7
     val totalSlots = startOffset + daysInMonth
     val rows = (totalSlots + 6) / 7
 
     Column {
         for (row in 0 until rows) {
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+            ) {
                 for (col in 0 until 7) {
                     val dayIndex = row * 7 + col - startOffset + 1
 
-                    Box(modifier = Modifier.weight(1f).aspectRatio(0.9f)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(0.9f)
+                    ) {
                         if (dayIndex in 1..daysInMonth) {
-                            // 1. 해당 날짜에 데이터가 있는지 확인
-                            val memory = monthItems.find { it.date.dayOfMonth == dayIndex }
+                            // 현재 날짜 계산 (YYYY-MM-DD 포맷)
+                            val currentDate = LocalDate.of(year, month, dayIndex)
+                            val dateString = currentDate.format(DateTimeFormatter.ISO_DATE)
 
-                            if (memory != null) {
-                                // ✅ 사진이 있는 날짜 디자인
+                            // 해당 날짜에 데이터가 있는지 확인
+                            val dayData = calendarDays.find { it.date == dateString }
+
+                            if (dayData != null) {
+                                // 썸네일 결정 (나의 사진 우선, 없으면 파트너 사진)
+                                val thumbnailUrl =
+                                    dayData.meImageThumbnailUrl ?: dayData.partnerImageThumbnailUrl
+
                                 Box(
                                     modifier = Modifier
                                         .padding(2.dp)
                                         .fillMaxSize()
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(0xFFEEEEEE))
-                                        .clickable {
-                                            // 전체 리스트에서 해당 객체의 인덱스를 찾아 전달
-                                            val globalIndex = allItems.indexOf(memory)
-                                            if (globalIndex != -1) onItemClick(globalIndex)
-                                        }
-                                ) {
-                                    // 내 사진을 대표 이미지로 사용
+                                        .clickable { onDayClick(dateString) }) {
                                     AsyncImage(
-                                        model = memory.myInfo.questionImageUrl,
+                                        model = thumbnailUrl,
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize()
                                     )
-
-                                    // 가독성을 위한 오버레이
+                                    // 숫자 가독성을 위한 오버레이
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(Color.Black.copy(alpha = 0.2f))
                                     )
 
-                                    // 날짜 숫자
                                     Text(
                                         text = "$dayIndex",
                                         fontSize = 14.sp,
@@ -439,7 +575,7 @@ fun MonthCalendarGrid(
                                     )
                                 }
                             } else {
-                                // 사진이 없는 날짜
+                                // 데이터가 없는 날짜
                                 Text(
                                     text = "$dayIndex",
                                     fontSize = 14.sp,
@@ -457,15 +593,36 @@ fun MonthCalendarGrid(
 
 @Composable
 fun QuestionListView(
-    memorySets: List<CoupleQuestionData>,
-    onQuestionClick: (Int) -> Unit
+    questions: List<ArchiveQuestionItem>,
+    onQuestionClick: (Int, ArchiveQuestionItem) -> Unit,
+    loadMore: () -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        itemsIndexed(memorySets) { index, item ->
-            Column(modifier = Modifier.fillMaxWidth().clickable { onQuestionClick(index) }.padding(horizontal = 20.dp, vertical = 24.dp)) {
+        itemsIndexed(questions) { index, item ->
+            // 페이지네이션: 마지막 아이템 도달 시 추가 로드
+            if (index >= questions.size - 1) {
+                LaunchedEffect(Unit) { loadMore() }
+            }
+
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onQuestionClick(index, item) }
+                .padding(horizontal = 20.dp, vertical = 24.dp)) {
                 Row(verticalAlignment = Alignment.Top) {
-                    Text(text = "#${String.format("%02d", index + 1)} ", color = Color(0xFFFF5A5A), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text(text = item.question, color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold, lineHeight = 24.sp)
+                    // 질문 번호 (서버에서 준 questionNumber 활용)
+                    Text(
+                        text = "#${item.questionNumber} ",
+                        color = Color(0xFFFF5A5A),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = item.questionContent,
+                        color = Color.Black,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 24.sp
+                    )
                 }
             }
             Divider(color = Color(0xFFF0F0F0), thickness = 1.dp)
@@ -492,35 +649,69 @@ fun ViewModeToggle(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuestionDetailScreen(
-    response: CoupleQuestionData, // API에서 받아온 data 객체
-    onBack: () -> Unit, onDelete: () -> Unit
+    data: QuestionDetailResponse, onBack: () -> Unit, onDelete: () -> Unit
 ) {
+
+    val scope = rememberCoroutineScope() // 코루틴 스코프 생성
+    val graphicsLayer = rememberGraphicsLayer() // 캡처를 위한 레이어
+    val context = LocalContext.current
+
+
+    // 사진이 둘 다 없는 경우 체크
+    val isBothEmpty =
+        data.myInfo?.questionImageUrl == null && data.partnerInfo?.questionImageUrl == null
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                // #505 처럼 ID 표시
-                title = {
-                    Text(
-                        "#${response.coupleQuestionId}",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }, navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBackIosNew, null) }
-                }, actions = {
-                    IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, null) }
-                })
-        }, bottomBar = { QuestionDetailBottomBar() }, containerColor = Color.White
+                title = { Text("#${data.questionNumber}", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBackIosNew, contentDescription = "뒤로가기")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "삭제")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
+            )
+        }, bottomBar = {
+            QuestionDetailBottomBar(onShare = {
+                scope.launch {
+                    val bitmap = graphicsLayer.toImageBitmap()
+//                        shareImage(context, bitmap)
+                }
+            }, onInstagram = {
+                scope.launch {
+                    val bitmap = graphicsLayer.toImageBitmap()
+                    shareToInstagram(context, bitmap)
+                }
+            }, onDownload = {
+                scope.launch {
+                    val bitmap = graphicsLayer.toImageBitmap()
+                    saveImageToGallery(context, bitmap)
+                }
+            })
+        }, containerColor = Color.White
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .drawWithContent {
+                    // 이 레이어에 현재 화면 내용을 기록합니다.
+                    graphicsLayer.record {
+                        this@drawWithContent.drawContent()
+                    }
+                    drawLayer(graphicsLayer)
+                },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1. 서버에서 온 질문 (상대가 가장 사랑스러워 보였던 순간은?)
+            // 질문 내용
             Text(
-                text = response.question,
+                text = data.questionContent,
                 textAlign = TextAlign.Center,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -528,21 +719,33 @@ fun QuestionDetailScreen(
                 modifier = Modifier.padding(vertical = 32.dp, horizontal = 24.dp)
             )
 
-            // 2. 상/하 분할 카드
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 20.dp, vertical = 24.dp,
-                    )
-                    .weight(1f), shape = RoundedCornerShape(24.dp)
-            ) {
-                Column {
-                    // 상단: 내 정보 (myInfo)
-                    DetailPhotoSection(info = response.myInfo, modifier = Modifier.weight(1f))
-
-                    // 하단: 상대방 정보 (partnerInfo)
-                    DetailPhotoSection(info = response.partnerInfo, modifier = Modifier.weight(1f))
+            if (isBothEmpty) {
+                // 사진이 모두 없는 경우 (명세 반영)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("삭제된 사진입니다.", color = Color.Gray)
+                }
+            } else {
+                // 사진 영역
+                Card(
+                    modifier = Modifier.padding(20.dp).weight(1f),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center // 답변이 하나일 때 중앙 정렬
+                    ) {
+                        data.myInfo?.let {
+                            DetailPhotoSection(info = it, modifier = Modifier.weight(1f))
+                        }
+                        data.partnerInfo?.let {
+                            DetailPhotoSection(info = it, modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -759,7 +962,9 @@ fun AnswerItemCard(answer: QuestionAnswer) {
 }
 
 @Composable
-fun QuestionDetailBottomBar() {
+fun QuestionDetailBottomBar(
+    onShare: () -> Unit, onInstagram: () -> Unit, onDownload: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -767,44 +972,50 @@ fun QuestionDetailBottomBar() {
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // 1. 일반 공유 버튼
         Box(
             modifier = Modifier
                 .size(50.dp)
-                .background(Color.Black, CircleShape),
-            contentAlignment = Alignment.Center
+                .background(Color.Black, CircleShape)
+                .clip(CircleShape) // 클릭 영역 제한
+                .clickable { onShare() }, contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Share,
-                contentDescription = null,
+                contentDescription = "공유",
                 modifier = Modifier.size(24.dp),
-                tint = Color.White // 전달받은 틴트 적용
+                tint = Color.White
             )
         }
 
+        // 2. 인스타그램 버튼
         Box(
             modifier = Modifier
                 .size(50.dp)
-                .background(Color.Black, CircleShape),
-            contentAlignment = Alignment.Center
+                .background(Color.Black, CircleShape)
+                .clip(CircleShape)
+                .clickable { onInstagram() }, contentAlignment = Alignment.Center
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_instargram),
-                contentDescription = null,
+                contentDescription = "인스타그램",
                 modifier = Modifier.size(48.dp)
             )
         }
 
+        // 3. 다운로드 버튼
         Box(
             modifier = Modifier
                 .size(50.dp)
-                .background(Color.Black, CircleShape),
-            contentAlignment = Alignment.Center
+                .background(Color.Black, CircleShape)
+                .clip(CircleShape)
+                .clickable { onDownload() }, contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.FileDownload,
-                contentDescription = null,
+                contentDescription = "저장",
                 modifier = Modifier.size(24.dp),
-                tint = Color.White // 전달받은 틴트 적용
+                tint = Color.White
             )
         }
     }
@@ -828,5 +1039,61 @@ fun BottomActionButton(
             modifier = Modifier.size(24.dp),
             tint = iconTint // 전달받은 틴트 적용
         )
+    }
+}
+
+// 캡처를 제어할 클래스
+class CaptureController {
+    var captureFunction: (() -> ImageBitmap)? = null
+    fun capture() = captureFunction?.invoke()
+}
+
+// 비트맵을 갤러리에 저장하는 간단한 로직
+private fun saveImageToGallery(context: Context, bitmap: ImageBitmap) {
+    val androidBitmap = bitmap.asAndroidBitmap()
+    val filename = "Connect_Archive_${System.currentTimeMillis()}.jpg"
+
+    val values = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+    }
+
+    val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+    uri?.let {
+        context.contentResolver.openOutputStream(it).use { out ->
+            if (out != null) {
+                androidBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+            }
+        }
+        Toast.makeText(context, "갤러리에 저장되었습니다.", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun shareToInstagram(context: Context, bitmap: ImageBitmap) {
+    val androidBitmap = bitmap.asAndroidBitmap()
+
+    // 1. 임시 파일 저장 (FileProvider 필요)
+    val file = File(context.cacheDir, "instagram_share.jpg")
+    FileOutputStream(file).use { out ->
+        androidBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+    }
+
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+
+    // 2. 인스타그램 스토리 인텐트 설정
+    val intent = Intent("com.instagram.share.ADD_TO_STORY").apply {
+        type = "image/jpeg"
+        putExtra("interactive_asset_uri", uri)
+        putExtra("top_background_color", "#000000") // 배경색 커스텀
+        putExtra("bottom_background_color", "#000000")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    // 3. 인스타그램 앱 실행
+    try {
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "인스타그램 앱이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
     }
 }

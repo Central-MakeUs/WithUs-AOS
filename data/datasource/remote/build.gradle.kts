@@ -11,7 +11,7 @@ android {
     namespace = "org.withus.app.data.remote"
 
     defaultConfig {
-        minSdk = 24       // 최소 API 레벨을 24로 설정 (DataStore와 Compose 권장 사양)
+        minSdk = 26       // 최소 API 레벨을 24로 설정 (DataStore와 Compose 권장 사양)
         targetSdk = 35    // 컴파일 버전과 맞춤
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

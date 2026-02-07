@@ -183,7 +183,6 @@ fun FourCutGalleryScreen(
             if (savedImages.isEmpty()) {
                 EmptyFourCutView(onCreateClick)
             } else {
-                // ✅ [수정 2] 2열 -> 3열 그리드로 변경
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3), // 여기를 3으로 변경
                     contentPadding = PaddingValues(1.dp),

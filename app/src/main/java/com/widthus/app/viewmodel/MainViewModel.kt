@@ -32,18 +32,23 @@ import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.withus.app.model.ApiException
+import org.withus.app.model.ArchiveDateGroup
+import org.withus.app.model.ArchiveQuestionItem
+import org.withus.app.model.CalendarDayInfo
 import org.withus.app.model.CoupleQuestionData
 import org.withus.app.model.JoinCouplePreviewData
 import org.withus.app.model.JoinCoupleRequest
 import org.withus.app.model.KeywordInfo
 import org.withus.app.model.KeywordUpdateRequest
 import org.withus.app.model.ProfileSettingStatus
+import org.withus.app.model.QuestionDetailResponse
 import org.withus.app.model.UserAnswerInfo
 import org.withus.app.token.TokenManager
 import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
 import org.withus.app.remote.ApiService
+import org.withus.app.repository.ArchiveRepository
 import org.withus.app.repository.CoupleRepository
 import org.withus.app.repository.DailyRepository
 import org.withus.app.repository.ProfileRepository
@@ -61,6 +66,7 @@ class MainViewModel @Inject constructor(
     private val coupleRepository: CoupleRepository,
     private val tokenManager: TokenManager,
     private val preferenceManager: PreferenceManager,
+    private val archiveRepository: ArchiveRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -810,6 +816,121 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             dailyRepository.uploadDailyPhoto(id, uri).onSuccess {
                 fetchDailyData(id) // 업로드 성공 후 화면 갱신을 위해 데이터 재조회
+            }
+        }
+    }
+
+    var archiveItems by mutableStateOf<List<Pair<String, UserAnswerInfo>>>(emptyList())
+        private set
+
+    private var nextCursor: String? = null
+    var hasNext by mutableStateOf(true)
+    var isLoading by mutableStateOf(false)
+
+    fun fetchArchives(isRefresh: Boolean = false) {
+        // 로딩 중이거나, 새로고침이 아닌데 다음 페이지가 없으면 리턴
+        if (isLoading || (!isRefresh && !hasNext)) return
+
+        isLoading = true
+
+        // 새로고침이면 커서를 null로, 아니면 기존 nextCursor 사용
+        val currentCursor = if (isRefresh) null else nextCursor
+
+        viewModelScope.launch {
+            archiveRepository.getArchiveList(size = 20, cursor = currentCursor)
+                .onSuccess { data ->
+                    val newItems = data.archiveList.flatMap { group ->
+                        group.imageInfoList.map { info -> group.date to info }
+                    }
+
+                    // 데이터 업데이트
+                    archiveItems = if (isRefresh) newItems else archiveItems + newItems
+                    nextCursor = data.nextCursor
+                    hasNext = data.hasNext
+                }
+                .onFailure { /* 에러 처리 */ }
+            isLoading = false
+        }
+    }
+    // 캘린더 화면용 데이터
+    var calendarDays by mutableStateOf<List<CalendarDayInfo>>(emptyList())
+        private set
+
+    // 상세 화면용 데이터
+    var detailItems by mutableStateOf<List<ArchiveDateGroup>>(emptyList())
+        private set
+
+
+    // 2. 상세 데이터 불러오기 (최신순 클릭 시 혹은 캘린더 클릭 시)
+    fun fetchDetail(date: String, targetId: Long? = null, targetType: String? = null) {
+        viewModelScope.launch {
+            archiveRepository.getDetailByDate(date, targetId, targetType)
+                .onSuccess { data ->
+                    detailItems = data.archiveInfoList
+
+                    // TODO: UI에서 detailItems 중 selected: true인 항목의 인덱스를 찾아
+                    // LazyColumn의 initialFirstVisibleItemIndex 등으로 전달해야 합니다.
+                }
+        }
+    }
+
+    // 현재 사용자가 보고 있는 기준 날짜 (기본값: 오늘)
+    var currentCalendarDate by mutableStateOf(LocalDate.now())
+        private set
+
+    // 월 변경 시 호출
+    fun updateCalendarMonth(monthsToAdd: Long) {
+        currentCalendarDate = currentCalendarDate.plusMonths(monthsToAdd)
+        fetchCalendar(currentCalendarDate.year, currentCalendarDate.monthValue)
+    }
+
+    // 캘린더 데이터 조회
+    fun fetchCalendar(year: Int, month: Int) {
+        viewModelScope.launch {
+            archiveRepository.getCalendar(year, month)
+                .onSuccess { data -> calendarDays = data.days }
+        }
+    }
+
+
+    // 질문 목록 데이터 상태
+    var archiveQuestions by mutableStateOf<List<ArchiveQuestionItem>>(emptyList())
+        private set
+
+    private var questionNextCursor: String? = null
+    var hasQuestionNext by mutableStateOf(true)
+    var isQuestionLoading by mutableStateOf(false)
+
+    fun fetchQuestionArchives(isRefresh: Boolean = false) {
+        if (isQuestionLoading || (!isRefresh && !hasQuestionNext)) return
+
+        isQuestionLoading = true
+        val currentCursor = if (isRefresh) null else questionNextCursor
+
+        viewModelScope.launch {
+            archiveRepository.getQuestionArchiveList(size = 20, cursor = currentCursor)
+                .onSuccess { data ->
+                    archiveQuestions = if (isRefresh) data.questionList else archiveQuestions + data.questionList
+                    questionNextCursor = data.nextCursor
+                    hasQuestionNext = data.hasNext
+                }
+                .onFailure { /* 에러 처리 */ }
+            isQuestionLoading = false
+        }
+    }
+
+    var selectedQuestionDetail by mutableStateOf<QuestionDetailResponse?>(null)
+        private set
+
+    fun fetchQuestionDetail(id: Long) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.getQuestionArchiveDetail(id)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    selectedQuestionDetail = response.body()?.data
+                }
+            } catch (e: Exception) {
+                Log.e("API", "질문 상세 조회 실패", e)
             }
         }
     }

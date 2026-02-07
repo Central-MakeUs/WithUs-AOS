@@ -1,6 +1,9 @@
 package org.withus.app.remote
 
 import okhttp3.RequestBody
+import org.withus.app.model.ArchiveDetailResponse
+import org.withus.app.model.ArchiveResponse
+import org.withus.app.model.CalendarResponse
 import org.withus.app.model.CommonResponse
 import org.withus.app.model.CoupleKeywordsData
 import org.withus.app.model.CoupleQuestionData
@@ -15,6 +18,8 @@ import org.withus.app.model.KeywordsData
 import org.withus.app.model.LoginResponse
 import org.withus.app.model.PresignedUrlData
 import org.withus.app.model.ProfileResponse
+import org.withus.app.model.QuestionArchiveResponse
+import org.withus.app.model.QuestionDetailResponse
 import org.withus.app.model.QuestionImageRequest
 import org.withus.app.model.StatusData
 import org.withus.app.model.request.LoginRequest
@@ -27,6 +32,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 import retrofit2.http.Url
 
 interface ApiService {
@@ -134,4 +140,35 @@ interface ApiService {
     @POST("/api/me/couple/terminate")
     suspend fun terminateCouple(): Response<CommonResponse<Unit>>
 
+    @GET("/api/me/couple/archives")
+    suspend fun getArchives(
+        @Query("size") size: Int = 20,
+        @Query("cursor") cursor: String? = null
+    ): Response<CommonResponse<ArchiveResponse>>
+
+    @GET("/api/me/couple/archives/date")
+    suspend fun getArchiveDetailByDate(
+        @Query("date") date: String,
+        @Query("targetId") targetId: Long? = null,
+        @Query("targetType") targetType: String? = null
+    ): Response<CommonResponse<ArchiveDetailResponse>>
+
+    // 월 단위 캘린더 조회
+    @GET("/api/me/couple/archives/calendar")
+    suspend fun getCalendarArchives(
+        @Query("year") year: Int,
+        @Query("month") month: Int
+    ): Response<CommonResponse<CalendarResponse>>
+
+
+    @GET("/api/me/couple/archives/questions")
+    suspend fun getQuestionArchives(
+        @Query("size") size: Int = 20,
+        @Query("cursor") cursor: String? = null
+    ): Response<CommonResponse<QuestionArchiveResponse>>
+
+    @GET("/api/me/couple/archives/questions/{coupleQuestionId}")
+    suspend fun getQuestionArchiveDetail(
+        @Path("coupleQuestionId") coupleQuestionId: Long
+    ): Response<CommonResponse<QuestionDetailResponse>>
 }
