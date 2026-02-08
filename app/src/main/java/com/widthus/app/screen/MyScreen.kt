@@ -1,7 +1,7 @@
 package com.widthus.app.screen
 
 import OnboardingConnectScreen
-import ProfileImageBottomSheet
+import ImageBottomSheet
 import ProfileImagePicker
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,10 +32,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.widthus.app.viewmodel.AuthViewModel
 import com.widthus.app.viewmodel.MainViewModel
 
 // --- 라우트 정의 ---
@@ -55,7 +54,8 @@ enum class EditMode { ME, PARTNER }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyScreenEntry(
-    viewModel: MainViewModel = hiltViewModel(),
+    viewModel: MainViewModel,
+    authViewModel: AuthViewModel,
     onNavigateToEditKeyword: () -> Unit,
     mediaManager: ImageMediaManager
 ) {
@@ -65,18 +65,21 @@ fun MyScreenEntry(
         // 1. 마이 메인 화면
         composable(MyRoute.Main.route) {
             MyMainScreen(
+                nickName = authViewModel.currentUserInfo.nickname,
                 onNavigateToAccount = { navController.navigate(MyRoute.Account.route) },
                 onNavigateToConnectInfo = { navController.navigate(MyRoute.PartnerInfo.route) },
                 mediaManager = mediaManager,
                 onEditProfile = {
-                    navController.navigate(MyRoute.ProfileEdit.route )
+                    navController.navigate(MyRoute.ProfileEdit.route)
                 },
-                onNavigateToEditKeyword = onNavigateToEditKeyword
+                onNavigateToEditKeyword = onNavigateToEditKeyword,
+                viewModel = viewModel
             )
         }
         // 2. 계정 관리 화면
         composable(MyRoute.Account.route) {
             AccountManagementScreen(
+                viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
                 onNavigateToDelete = { navController.navigate(MyRoute.DeleteWarning.route) }
             )
@@ -106,19 +109,19 @@ fun MyScreenEntry(
         }
         // 5. 연결 해제
         composable(MyRoute.Disconnect.route) {
-            LaunchedEffect(viewModel.isDisconnectSuccess) {
-                if (viewModel.isDisconnectSuccess) {
+            LaunchedEffect(authViewModel.isDisconnectSuccess) {
+                if (authViewModel.isDisconnectSuccess) {
                     navController.navigate(Screen.OnboardingConnect.route) {
                         popUpTo(MyRoute.Main.route) { inclusive = true }
                     }
-                    viewModel.resetDisconnectStatus()
+                    authViewModel.resetDisconnectStatus()
                 }
             }
 
             DisconnectScreen(
                 onBack = { navController.popBackStack() },
                 onConfirmDisconnect = {
-                    viewModel.terminateCouple()
+                    authViewModel.terminateCouple()
                 }
             )
         }
@@ -126,7 +129,7 @@ fun MyScreenEntry(
 // 1. 내 프로필 편집
         composable(MyRoute.ProfileEdit.route) {
             ProfileEditScreen(
-                viewModel = viewModel,
+                viewModel = authViewModel,
                 mode = EditMode.ME,
                 onBack = { navController.popBackStack() },
                 mediaManager = mediaManager,
@@ -140,7 +143,7 @@ fun MyScreenEntry(
         composable(MyRoute.PartnerInfo.route) {
             if (viewModel.isConnect) {
                 ProfileEditScreen(
-                    viewModel = viewModel,
+                    viewModel = authViewModel,
                     mode = EditMode.PARTNER,
                     onBack = { navController.popBackStack() },
                     mediaManager = mediaManager,
@@ -150,7 +153,7 @@ fun MyScreenEntry(
                 )
             } else {
                 OnboardingConnectScreen(
-                    viewModel = viewModel,
+                    nickname = authViewModel.currentUserInfo.nickname,
                     onInviteClick = { navController.navigate(Screen.Invite.route) },
                     onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
                     onCloseClick = { navController.navigate(Screen.ConnectionPending.route) },
@@ -178,7 +181,8 @@ fun MyScreenEntry(
 // =================================================================
 @Composable
 fun MyMainScreen(
-    viewModel: MainViewModel = hiltViewModel(),
+    viewModel: MainViewModel,
+    nickName: String,
     onNavigateToAccount: () -> Unit,
     onNavigateToConnectInfo: () -> Unit,
     onEditProfile: () -> Unit,
@@ -214,7 +218,7 @@ fun MyMainScreen(
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(viewModel.nickname, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(nickName, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Text("${viewModel.joinDate} 가입", fontSize = 14.sp, color = Color.Gray)
                 }
                 OutlinedButton(
@@ -257,7 +261,7 @@ fun MyMainScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountManagementScreen(
-    viewModel: MainViewModel = hiltViewModel(),
+    viewModel: AuthViewModel,
     onBack: () -> Unit, onNavigateToDelete: () -> Unit
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -778,7 +782,7 @@ fun LogoutConfirmDialog(onDismiss: () -> Unit, onLogout: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileEditScreen(
-    viewModel: MainViewModel,
+    viewModel: AuthViewModel,
     mode: EditMode, // ✅ 모드 추가
     onBack: () -> Unit,
     onNavigateToDisconnect: () -> Unit,
@@ -812,9 +816,9 @@ fun ProfileEditScreen(
     }
 
     val title = if (mode == EditMode.ME) "프로필 편집" else "커플 연결 정보"
-    val nicknameValue = if (mode == EditMode.ME) viewModel.nickname else viewModel.partnerNickname
+    val nicknameValue = if (mode == EditMode.ME) viewModel.currentUserInfo else viewModel.partnerUserInfo
     val birthdayValue = if (mode == EditMode.ME) viewModel.birthdayValue else viewModel.partnerBirthdayValue
-    val profileUri = if (mode == EditMode.ME) viewModel.profileImageUri else viewModel.partnerProfileUri
+    val profileUri = if (mode == EditMode.ME) viewModel.currentUserInfo.profileUrl else viewModel.partnerProfileUri
 
     Scaffold(
         topBar = {
@@ -857,12 +861,12 @@ fun ProfileEditScreen(
                 Text("닉네임", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = nicknameValue,
+                    value = nicknameValue.nickname,
                     onValueChange = {
                         if (mode == EditMode.ME) viewModel.updateNickname(it)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    readOnly = mode == EditMode.PARTNER, // ✅ 파트너 정보는 읽기 전용
+                    readOnly = mode == EditMode.PARTNER, // 파트너 정보는 읽기 전용
                     colors = OutlinedTextFieldDefaults.colors(
                         unfocusedContainerColor = Color(0xFFF9F9F9),
                         focusedContainerColor = Color(0xFFF9F9F9),
@@ -915,11 +919,15 @@ fun ProfileEditScreen(
 
         // 바텀시트도 내 프로필일 때만 작동하도록 함
         if (mode == EditMode.ME) {
-            ProfileImageBottomSheet(
+            ImageBottomSheet(
                 showSheet = showSheet,
                 onDismiss = { showSheet = false },
-                onCameraClick = { mediaManager.launchCamera { viewModel.profileImageUri = it } },
-                onGalleryClick = { mediaManager.launchGallery { viewModel.profileImageUri = it } }
+                onCameraClick = { mediaManager.launchCamera { viewModel.currentUserInfo.copy(
+                    profileUrl = it
+                ) } },
+                onGalleryClick = { mediaManager.launchGallery { viewModel.currentUserInfo.copy(
+                    profileUrl = it
+                ) } },
             )
         }
     }

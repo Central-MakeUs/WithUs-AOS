@@ -1,6 +1,5 @@
 package com.widthus.app.screen
 
-import CalendarHomeScreen
 import ConnectCompleteScreen
 import ConnectConfirmScreen
 import ConnectionPendingScreen
@@ -11,7 +10,6 @@ import HomeScreen
 import InviteScreen
 import KeywordSelectionScreen
 import NotificationTimeScreen
-import PhotoFlowScreen
 import StepInputScreen
 import android.net.Uri
 import android.os.Build
@@ -40,13 +38,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kakao.sdk.common.util.Utility
 import com.kakao.sdk.user.UserApiClient
+import com.widthus.app.model.LocalPartnerNickname
+import com.widthus.app.model.LocalUserNickname
 import com.widthus.app.model.ProfileLoadResult
+import com.widthus.app.viewmodel.AuthViewModel
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.withus.app.debug
-import org.withus.app.model.ProfileSettingStatus
 
 sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
@@ -73,333 +71,327 @@ sealed class Screen(val route: String) {
 // ==========================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
+fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
+                  authViewModel: AuthViewModel = hiltViewModel()) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val schedules = viewModel.dummySchedules
-    val memories = viewModel.dummyMemories
     var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
     // 3. 미디어 매니저 (최상위 공유)
     val mediaManager = rememberImageMediaManager()
 
-    NavHost(
-        navController = navController,
+    CompositionLocalProvider(LocalUserNickname provides authViewModel.currentUserInfo,
+        LocalPartnerNickname provides authViewModel.partnerUserInfo
+    ) {
+        NavHost(
+            navController = navController,
 //        startDestination = Screen.Onboarding.route
 //        startDestination = Screen.Login.route
-//        startDestination = Screen.Home.route
-        startDestination = Screen.Home.route
+            startDestination = Screen.Home.route
 //        startDestination = Screen.Gallery.route
 //        startDestination = Screen.PhotoFlow.route
-    ) {
-        composable(Screen.Onboarding.route) {
-            OnboardingScreen(
-                viewModel = viewModel,
-                onFinish = {
-                    navController.navigate(Screen.Login.route)
-                }
-            )
-        }
+        ) {
+            composable(Screen.Onboarding.route) {
+                OnboardingScreen(
+                    viewModel = viewModel,
+                    onFinish = {
+                        navController.navigate(Screen.Login.route)
+                    }
+                )
+            }
 
-        composable(Screen.Gallery.route) {
-            GalleryScreen()
-        }
+            composable(Screen.Gallery.route) {
+                GalleryScreen()
+            }
 
-        composable(Screen.Login.route) {
-            LoginScreen(
-                onKakaoLogin = {
-                    UserApiClient.instance.loginWithKakaoTalk(context) { token, error ->
-                        if (error != null) {
-                            // 에러 메시지 추출
-                            val errMsg = error.message ?: error.toString()
+            composable(Screen.Login.route) {
+                LoginScreen(
+                    onKakaoLogin = {
+                        UserApiClient.instance.loginWithKakaoTalk(context) { token, error ->
+                            if (error != null) {
+                                // 에러 메시지 추출
+                                val errMsg = error.message ?: error.toString()
 
-                            // 로그는 남기되, 사용자에게는 Toast로 표시
-                            Log.e("TAG", "로그인 실패: $errMsg", error)
-                            Toast.makeText(context, "로그인 실패: $errMsg", Toast.LENGTH_LONG).show()
+                                // 로그는 남기되, 사용자에게는 Toast로 표시
+                                Log.e("TAG", "로그인 실패: $errMsg", error)
+                                Toast.makeText(context, "로그인 실패: $errMsg", Toast.LENGTH_LONG).show()
 
-                            // 디버그용: 키 해시 출력 (원하면)
-                            val keyHash = Utility.getKeyHash(context)
-                            Log.d("KeyHash", "현재 기기 키 해시: $keyHash")
+                                // 디버그용: 키 해시 출력 (원하면)
+                                val keyHash = Utility.getKeyHash(context)
+                                Log.d("KeyHash", "현재 기기 키 해시: $keyHash")
 
-                            // 카카오톡이 설치되어 있지 않은 경우, 카카오 계정 로그인으로 폴백
-                            // (에러 문자열에 따라 판별하거나, Throwable 타입 체크 가능)
-                            val lower = errMsg.lowercase()
-                            if (lower.contains("kakaotalk not installed") || lower.contains("notinstalled") ||
-                                lower.contains("notsupported") || error::class.simpleName == "ClientError"
-                            ) {
-                                // 안전하게 계정 로그인 시도
-                                UserApiClient.instance.loginWithKakaoAccount(context) { accToken, accError ->
-                                    if (accError != null) {
-                                        val accMsg = accError.message ?: accError.toString()
-                                        Log.e("TAG", "카카오계정 로그인 실패: $accMsg", accError)
-                                        Toast.makeText(
-                                            context,
-                                            "카카오계정 로그인 실패: $accMsg",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    } else if (accToken != null) {
-                                        Log.i("TAG", "카카오계정 로그인 성공 ${accToken.accessToken}")
-                                        coroutineScope.launch {
-                                            val isSuccess =
-                                                viewModel.handleKakaoLogin(accToken.accessToken)
-                                            if (isSuccess) {
+                                // 카카오톡이 설치되어 있지 않은 경우, 카카오 계정 로그인으로 폴백
+                                // (에러 문자열에 따라 판별하거나, Throwable 타입 체크 가능)
+                                val lower = errMsg.lowercase()
+                                if (lower.contains("kakaotalk not installed") || lower.contains("notinstalled") ||
+                                    lower.contains("notsupported") || error::class.simpleName == "ClientError"
+                                ) {
+                                    // 안전하게 계정 로그인 시도
+                                    UserApiClient.instance.loginWithKakaoAccount(context) { accToken, accError ->
+                                        if (accError != null) {
+                                            val accMsg = accError.message ?: accError.toString()
+                                            Log.e("TAG", "카카오계정 로그인 실패: $accMsg", accError)
+                                            Toast.makeText(
+                                                context,
+                                                "카카오계정 로그인 실패: $accMsg",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        } else if (accToken != null) {
+                                            Log.i("TAG", "카카오계정 로그인 성공 ${accToken.accessToken}")
+                                            coroutineScope.launch {
+                                                val isSuccess =
+                                                    authViewModel.handleKakaoLogin(accToken.accessToken)
+                                                if (isSuccess) {
 
-                                                when (val result = viewModel.getUserProfile()) {
-                                                    is ProfileLoadResult.Success -> {
-                                                        viewModel.navigateToNextScreenBasedOnStatus(
-                                                            navController
-                                                        )
+                                                    when (val result = authViewModel.getUserProfile()) {
+                                                        is ProfileLoadResult.Success -> {
+                                                            viewModel.navigateToNextScreenBasedOnStatus(
+                                                                navController
+                                                            )
+                                                        }
+
+                                                        is ProfileLoadResult.Error -> {
+                                                            // 에러 메시지 토스트나 스낵바 표시
+                                                            Toast.makeText(
+                                                                context,
+                                                                "로그인 실패: ${result.message}",
+                                                                Toast.LENGTH_LONG
+                                                            ).show()
+
+                                                        }
+
+                                                        else -> {
+
+                                                        }
                                                     }
 
-                                                    is ProfileLoadResult.Error -> {
-                                                        // 에러 메시지 토스트나 스낵바 표시
-                                                        Toast.makeText(
-                                                            context,
-                                                            "로그인 실패: ${result.message}",
-                                                            Toast.LENGTH_LONG
-                                                        ).show()
-
-                                                    }
-
-                                                    else -> {
-
-                                                    }
+                                                } else {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "서버 로그인 실패",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
                                                 }
-
-                                            } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    "서버 로그인 실패",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
                                             }
                                         }
                                     }
                                 }
-                            }
-                        } else if (token != null) {
-                            Log.i("TAG", "로그인 성공 ${token.accessToken}")
-                            coroutineScope.launch {
-                                val isSuccess = viewModel.handleKakaoLogin(token.accessToken)
-                                if (isSuccess) {
+                            } else if (token != null) {
+                                Log.i("TAG", "로그인 성공 ${token.accessToken}")
+                                coroutineScope.launch {
+                                    val isSuccess = authViewModel.handleKakaoLogin(token.accessToken)
+                                    if (isSuccess) {
 
-                                    when (val result = viewModel.getUserProfile()) {
-                                        is ProfileLoadResult.Success -> {
-                                            viewModel.navigateToNextScreenBasedOnStatus(
-                                                navController
-                                            )
+                                        when (val result = authViewModel.getUserProfile()) {
+                                            is ProfileLoadResult.Success -> {
+                                                viewModel.navigateToNextScreenBasedOnStatus(
+                                                    navController
+                                                )
+                                            }
+
+                                            is ProfileLoadResult.Error -> {
+                                                // 에러 메시지 토스트나 스낵바 표시
+                                                Toast.makeText(
+                                                    context,
+                                                    "로그인 실패: ${result.message}",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+
+                                            }
+
+                                            else -> {}
                                         }
-
-                                        is ProfileLoadResult.Error -> {
-                                            // 에러 메시지 토스트나 스낵바 표시
-                                            Toast.makeText(
-                                                context,
-                                                "로그인 실패: ${result.message}",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-
-                                        }
-
-                                        else -> {}
+                                    } else {
+                                        Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
                                     }
-                                } else {
-                                    Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                    onGoogleLogin = {
+                        navController.navigate(Screen.StepInput.route)
+                    }
+                )
+            }
+
+            composable(Screen.StepInput.route) {
+                StepInputScreen(
+                    viewModel = authViewModel,
+                    mediaManager = mediaManager,
+                    onAllFinish = {
+                        /*navController.navigate(Screen.OnboardingConnect.route)*/
+                        coroutineScope.launch {
+                            when (authViewModel.uploadProfileAndSave(false)) {
+                                ProfileLoadResult.Success -> {
+                                    viewModel.navigateToNextScreenBasedOnStatus(navController)
+                                }
+
+                                else -> {
+                                    Toast.makeText(context, "업로드 실패", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
                     }
-                },
-                onGoogleLogin = {
-                    navController.navigate(Screen.StepInput.route)
-                }
-            )
-        }
+                )
+            }
 
-        composable(Screen.StepInput.route) {
-            StepInputScreen(
-                viewModel = viewModel,
-                mediaManager = mediaManager,
-                onAllFinish = {
-                    /*navController.navigate(Screen.OnboardingConnect.route)*/
-                    coroutineScope.launch {
-                        when (viewModel.uploadProfileAndSave(false)) {
-                            ProfileLoadResult.Success -> {
-                                viewModel.navigateToNextScreenBasedOnStatus(navController)
-                            }
-
-                            else -> {
-                                Toast.makeText(context, "업로드 실패", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
-                }
-            )
-        }
-
-        composable(Screen.OnboardingConnect.route) {
-            OnboardingConnectScreen(
-                viewModel = viewModel,
-                onInviteClick = {
-                    navController.navigate(Screen.Invite.route) },
-                onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
-                onCloseClick = { navController.navigate(Screen.ConnectionPending.route) },
-                topBar = {
-                    // 상단 바 영역
-                    TopAppBar(
-                        title = { }, // 제목은 비워둠
-                        actions = {
-                            // 오른쪽 버튼들 (actions)
-                            IconButton(onClick = {
-                                navController.navigate(Screen.ConnectionPending.route)
-                            }) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_close),
-                                    contentDescription = "닫기",
-                                    tint = Color.Black,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }, colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.White
+            composable(Screen.OnboardingConnect.route) {
+                OnboardingConnectScreen(
+                    nickname = authViewModel.currentUserInfo.nickname,
+                    onInviteClick = {
+                        navController.navigate(Screen.Invite.route) },
+                    onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
+                    onCloseClick = { navController.navigate(Screen.ConnectionPending.route) },
+                    topBar = {
+                        // 상단 바 영역
+                        TopAppBar(
+                            title = { }, // 제목은 비워둠
+                            actions = {
+                                // 오른쪽 버튼들 (actions)
+                                IconButton(onClick = {
+                                    navController.navigate(Screen.ConnectionPending.route)
+                                }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_close),
+                                        contentDescription = "닫기",
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }, colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.White
+                            )
                         )
-                    )
-                }
-            )
-        }
-
-        composable(Screen.ConnectionPending.route) {
-            ConnectionPendingScreen(
-                viewModel = viewModel,
-                title = "앗!\n아직 커플 연결이 되지 않았어요",
-                body = "연결을 완료하고 \n사진으로 일상을 공유해보세요!",
-                buttonText = "연결하러 가기",
-                onConnectClick = {
-                    navController.navigate(Screen.OnboardingConnect.route)
-                },
-                bottomBar = {}
-            )
-        }
-
-        composable(Screen.RandomQuestionTime.route) {
-            NotificationTimeScreen(
-                onBackClick = {},
-                onFinish = { timeString ->
-                    Log.d("SETTING", "선택된 시간: $timeString")
-                    viewModel.completeOnboarding()
-                }
-            )
-        }
-
-        composable(Screen.ConnectionLastSetting.route) {
-            ConnectionPendingScreen(
-                viewModel = viewModel,
-                title = "기록을 남기기 위한 \n마지막 설정이 남아있어요",
-                body = "랜덤 질문 알림 시간과 \n키워드 설정을 완료해주세요.",
-                buttonText = "   설정하러 가기",
-                onConnectClick = { /* 설정 페이지 이동 로직 */ },
-                bottomBar = {
-                    MainBottomNavigationBar(
-                        currentRoute = currentRoute,
-                        onItemSelected = { selectedItem ->
-                            currentRoute = selectedItem.route
-                        }
-                    )
-                }
-            )
-        }
-
-        composable(Screen.ConnectConfirm.route) {
-            ConnectConfirmScreen(
-                viewModel = viewModel,
-                onConfirmClick = {
-                    coroutineScope.launch { it
-                        viewModel.joinCouple(it)
                     }
-                    navController.navigate(Screen.ConnectComplete.route)
-                },
-                onLaterClick = {},
-                navController
-            )
-        }
+                )
+            }
 
-        composable(Screen.ConnectComplete.route) {
-            ConnectCompleteScreen(
-                viewModel = viewModel,
-                onStartClick = {},
-            )
-        }
-
-        composable(Screen.KeywordSelect.route) {
-            KeywordSelectionScreen(
-                viewModel = viewModel,
-                onBackClick = {
-                    navController.popBackStack()
-                },
-                onNextClick = {
-                    navController.popBackStack()
-                },
-                isMyPage = viewModel.isOnboardingComplete
-            )
-        }
-
-        composable(Screen.Invite.route) {
-            InviteScreen(
-                onBack = {
-                    if (viewModel.nickname.isNotEmpty()) {
+            composable(Screen.ConnectionPending.route) {
+                ConnectionPendingScreen(
+                    viewModel = viewModel,
+                    title = "앗!\n아직 커플 연결이 되지 않았어요",
+                    body = "연결을 완료하고 \n사진으로 일상을 공유해보세요!",
+                    buttonText = "연결하러 가기",
+                    onConnectClick = {
                         navController.navigate(Screen.OnboardingConnect.route)
+                    },
+                    bottomBar = {}
+                )
+            }
+
+            composable(Screen.RandomQuestionTime.route) {
+                NotificationTimeScreen(
+                    onBackClick = {},
+                    onFinish = { timeString ->
+                        Log.d("SETTING", "선택된 시간: $timeString")
+                        viewModel.completeOnboarding()
                     }
-                },
-                viewModel = viewModel
-            )
-        }
+                )
+            }
 
-        composable(Screen.EnterCode.route) {
-            EnterCodeScreen(
-                onBack = { navController.popBackStack() },
-                onConnect = { code, onResult -> // code: 입력한 코드, onResult: 결과 콜백
-                    coroutineScope.launch {
-                        viewModel.previewJoinCouple(code)
-                            .onSuccess { preview ->
-                                // 성공 시
-                                navController.currentBackStackEntry?.savedStateHandle?.set("join_preview", preview)
-                                navController.navigate(Screen.ConnectConfirm.route)
-
-                                // 성공 콜백 호출 (에러 없음)
-                                onResult(true, null)
+            composable(Screen.ConnectionLastSetting.route) {
+                ConnectionPendingScreen(
+                    viewModel = viewModel,
+                    title = "기록을 남기기 위한 \n마지막 설정이 남아있어요",
+                    body = "랜덤 질문 알림 시간과 \n키워드 설정을 완료해주세요.",
+                    buttonText = "   설정하러 가기",
+                    onConnectClick = { /* 설정 페이지 이동 로직 */ },
+                    bottomBar = {
+                        MainBottomNavigationBar(
+                            currentRoute = currentRoute,
+                            onItemSelected = { selectedItem ->
+                                currentRoute = selectedItem.route
                             }
-                            .onFailure { error ->
-                                // 실패 시
-                                // 에러 메시지 추출 (예: "자기 자신을 초대할 수 없습니다.")
-                                // error가 커스텀 Exception이라면 message 프로퍼티 사용
-                                val message = error.message ?: "초대코드를 다시 확인해주세요."
-
-                                // 실패 콜백 호출 (에러 메시지 전달)
-                                onResult(false, message)
-                            }
+                        )
                     }
-                }
-            )
-        }
+                )
+            }
+
+            composable(Screen.ConnectConfirm.route) {
+                ConnectConfirmScreen(
+                    onConfirmClick = {
+                        coroutineScope.launch { it
+                            viewModel.joinCouple(it)
+                        }
+                        navController.navigate(Screen.ConnectComplete.route)
+                    },
+                    onLaterClick = {},
+                    navController
+                )
+            }
+
+            composable(Screen.ConnectComplete.route) {
+                ConnectCompleteScreen(
+                    viewModel = viewModel,
+                    onStartClick = {},
+                )
+            }
+
+            composable(Screen.KeywordSelect.route) {
+                KeywordSelectionScreen(
+                    viewModel = viewModel,
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    onNextClick = {
+                        navController.popBackStack()
+                    },
+                    isMyPage = viewModel.isOnboardingComplete
+                )
+            }
+
+            composable(Screen.Invite.route) {
+                InviteScreen(
+                    onBack = {
+                        if (authViewModel.currentUserInfo.nickname.isNotEmpty()) {
+                            navController.navigate(Screen.OnboardingConnect.route)
+                        }
+                    },
+                    viewModel = viewModel
+                )
+            }
+
+            composable(Screen.EnterCode.route) {
+                EnterCodeScreen(
+                    onBack = { navController.popBackStack() },
+                    onConnect = { code, onResult -> // code: 입력한 코드, onResult: 결과 콜백
+                        coroutineScope.launch {
+                            viewModel.previewJoinCouple(code)
+                                .onSuccess { preview ->
+                                    // 성공 시
+                                    navController.currentBackStackEntry?.savedStateHandle?.set("join_preview", preview)
+                                    navController.navigate(Screen.ConnectConfirm.route)
+
+                                    // 성공 콜백 호출 (에러 없음)
+                                    onResult(true, null)
+                                }
+                                .onFailure { error ->
+                                    // 실패 시
+                                    // 에러 메시지 추출 (예: "자기 자신을 초대할 수 없습니다.")
+                                    // error가 커스텀 Exception이라면 message 프로퍼티 사용
+                                    val message = error.message ?: "초대코드를 다시 확인해주세요."
+
+                                    // 실패 콜백 호출 (에러 메시지 전달)
+                                    onResult(false, message)
+                                }
+                        }
+                    }
+                )
+            }
 
 
-        composable(Screen.Home.route) {
-            MainScreen(viewModel, navController, mediaManager)
-        }
+            composable(Screen.Home.route) {
+                MainScreen(viewModel, navController, authViewModel, mediaManager)
+            }
 
-        composable(Screen.PhotoFlow.route) {
-            PhotoFlowScreen()
-        }
+//        composable(Screen.PhotoFlow.route) {
+//            PhotoFlowScreen()
+//        }
 
-        composable(Screen.Calendar.route) {
-            CalendarHomeScreen(
-                nickname = viewModel.nickname,
-                memories = memories,
-                onNavigateToDayUs = { navController.navigate(Screen.DayUs.route) }
-            )
-        }
 
-        composable(Screen.DayUs.route) {
-            DayUsScreen()
+            composable(Screen.DayUs.route) {
+                DayUsScreen()
+            }
         }
     }
 }
@@ -411,6 +403,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel()) {
 fun MainScreen(
     viewModel: MainViewModel,
     navController: NavHostController,
+    authViewModel: AuthViewModel,
     mediaManager: ImageMediaManager
 ) {
     // 1. 네비게이션 상태
@@ -458,14 +451,15 @@ fun MainScreen(
                     }
 
                     BottomNavItem.Memory.route -> {
-                        // 새로 만든 갤러리 화면 연결
-                        FourCutGalleryScreen(
-                            savedImages = savedFourCuts,
-                            onCreateClick = { isEditorOpen = true }, // 만들기 버튼 클릭
-                            onDeleteRequest = { urisToDelete ->
-                                savedFourCuts.removeAll(urisToDelete)
-                            }
-                        )
+                        MemoryArchiveScreen(mainViewModel = viewModel, mediaManager = mediaManager)
+//                        // 새로 만든 갤러리 화면 연결
+//                        FourCutGalleryScreen(
+//                            savedImages = savedFourCuts,
+//                            onCreateClick = { isEditorOpen = true }, // 만들기 버튼 클릭
+//                            onDeleteRequest = { urisToDelete ->
+//                                savedFourCuts.removeAll(urisToDelete)
+//                            }
+//                        )
                     }
 
                     BottomNavItem.Gallery.route -> {
@@ -474,6 +468,8 @@ fun MainScreen(
 
                     BottomNavItem.My.route -> {
                         MyScreenEntry(
+                            viewModel = viewModel,
+                            authViewModel = authViewModel,
                             mediaManager = mediaManager,
                             onNavigateToEditKeyword = {
                                 navController.navigate(Screen.KeywordSelect.route)

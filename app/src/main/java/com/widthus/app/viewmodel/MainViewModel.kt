@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.withus.app.debug
 import org.withus.app.model.ApiException
 import org.withus.app.model.ArchiveDateGroup
 import org.withus.app.model.ArchiveQuestionItem
@@ -52,6 +53,7 @@ import org.withus.app.repository.ArchiveRepository
 import org.withus.app.repository.CoupleRepository
 import org.withus.app.repository.DailyRepository
 import org.withus.app.repository.ProfileRepository
+import org.withus.app.repository.TestTest
 import org.withus.app.repository.UserRepository
 import java.io.IOException
 import java.time.LocalDate
@@ -63,47 +65,13 @@ class MainViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val dailyRepository: DailyRepository,
     private val userRepository: UserRepository,
-    private val coupleRepository: CoupleRepository,
     private val tokenManager: TokenManager,
     private val preferenceManager: PreferenceManager,
     private val archiveRepository: ArchiveRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
-    private val _profileUpdated = MutableSharedFlow<Unit>()
-    val profileUpdated: SharedFlow<Unit> = _profileUpdated.asSharedFlow()
-
-    var isDisconnectSuccess by mutableStateOf(false)
-        private set
-
-    // helper: "YYYYMMDD" 또는 "YYYY-MM-DD" -> "YYYY-MM-DD"
-    private fun formatBirthday(input: String): String {
-        val digits = input.filter { it.isDigit() }
-        return if (digits.length == 8) {
-            "${digits.substring(0,4)}-${digits.substring(4,6)}-${digits.substring(6,8)}"
-        } else {
-            // 이미 포맷되어 있거나 비어있으면 그대로 반환
-            input
-        }
-    }
-
-    fun terminateCouple() {
-        viewModelScope.launch {
-            coupleRepository.terminateCouple()
-                .onSuccess {
-                    isDisconnectSuccess = true
-                }
-                .onFailure { error ->
-                    Log.e("TERMINATE", "실패: ${error.message}")
-                    // 에러 팝업이나 토스트 메시지 처리
-                }
-        }
-    }
-
-    fun resetDisconnectStatus() {
-        isDisconnectSuccess = false
-    }
-
+    var isCreatingManual by mutableStateOf(false)
     private val _myCode = MutableStateFlow<String?>(null)
     val myCode: StateFlow<String?> = _myCode.asStateFlow()
 
@@ -116,12 +84,7 @@ class MainViewModel @Inject constructor(
     var isOnboardingComplete by mutableStateOf(false)
         private set
     // 1단계: 닉네임
-    var nickname by mutableStateOf("jpg") // 기본값 설정
-        private set
 
-
-    var partnerNickname by mutableStateOf("쏘피") // 파트너 이름
-        private set
 
     // 탈퇴 성공 여부를 알리는 이벤트 (UI에서 관찰하여 로그아웃 처리)
     var isDeleteAccountSuccess by mutableStateOf(false)
@@ -149,7 +112,6 @@ class MainViewModel @Inject constructor(
 
     var isConnect = false
 
-    var jwtToken = String()
 
     init {
         // 앱 실행 시 저장된 값들을 로드
@@ -162,34 +124,6 @@ class MainViewModel @Inject constructor(
         loadDummyMemories()
     }
 
-    fun updateNickname(input: String) { nickname = input }
-
-    // 2단계: 생일
-    var birthdayValue by mutableStateOf(TextFieldValue("")) // String 대신 TextFieldValue 사용
-        private set
-
-    fun updateBirthday(input: TextFieldValue) {
-        val originalText = input.text
-        val digitsOnly = originalText.filter { it.isDigit() }
-        val limitedDigits = if (digitsOnly.length > 8) digitsOnly.substring(0, 8) else digitsOnly
-
-        val formatted = buildString {
-            for (i in limitedDigits.indices) {
-                append(limitedDigits[i])
-                if ((i == 3 || i == 5) && i != limitedDigits.lastIndex) {
-                    append("-")
-                }
-            }
-        }
-
-        birthdayValue = TextFieldValue(
-            text = formatted,
-            selection = TextRange(formatted.length)
-        )
-    }
-
-    var partnerBirthdayValue by mutableStateOf(TextFieldValue("1998.05.12"))
-    var partnerProfileUri by mutableStateOf<Uri?>(null)
 
     // 3단계: 첫 만남 기념일
     var anniversaryDate by mutableStateOf("")
@@ -201,7 +135,6 @@ class MainViewModel @Inject constructor(
     }
 
     // 4단계: 프로필 이미지 URI
-    var profileImageUri by mutableStateOf<Uri?>(null)
 
 //    var userUploadedImage by mutableStateOf<Uri?>(null)
     var userUploadedImage by mutableStateOf<Uri?>(
@@ -212,10 +145,6 @@ class MainViewModel @Inject constructor(
 //        Uri.parse("https://img1.daumcdn.net/thumb/R1280x0.fjpg/?fname=http://t1.daumcdn.net/brunch/service/user/1dEO/image/CIieqAqy0KlR6UdFHxrc1NsGtVM.jpg")
 //    )
     var partnerUploadedImage by mutableStateOf<Uri?>(null)
-//
-    fun updateProfileImage(uri: Uri?) {
-        profileImageUri = uri
-    }
 
 
     var selectedImageUri by mutableStateOf<Uri?>(null)
@@ -238,175 +167,19 @@ class MainViewModel @Inject constructor(
     )
 
     val onboardingPages = listOf(
-        OnboardingPage("매일 발송되는 랜덤 질문", "주어진 질문에 사진 한 장으로\n서로의 마음을 확인해요"),
-        OnboardingPage("사진으로 일상을 함께", "쌓여가는 둘만의 사진 기록을\n한눈에 확인해요"),
-        OnboardingPage("우리 취향대로 커플네컷", "원하는 사진으로\n둘만의 인생 네컷을 만들어봐요"),
+        OnboardingPage("오늘의 질문", "매일 전달되는 질문으로\n서로에 대해 더 알아가요.", "매일 제시되는 질문에 사진으로 답하면, \n" +
+                "상대의 생각을 자연스럽게 엿볼 수 있어요.", R.drawable.image_onboarding_step1),
+        OnboardingPage("오늘의 일상 ", "오늘 하루를 \n" +
+                "사진 한 장으로 나눠요", "함께 정한 키워드로 사진 한 장씩,\n" +
+                "부담 없이 가볍고 다정한 일상 공유가 시작돼요.", R.drawable.image_onboarding_step2),
+        OnboardingPage("자동 추억 생성", "쌓이는 일상이 \n" +
+                "우리의 이야기가 돼요", "일주일의 일상 사진이 자동으로 추억이 되고, \n" +
+                "원하는 순간을 직접 담을 수도 있어요.", R.drawable.image_onboarding_step3),
+
     )
 
     fun updateSelectedImage(uri: Uri?) {
         selectedImageUri = uri
-    }
-
-    /**
-     * 카카오 로그인 처리
-     * NetworkModule에서 제공된 apiService를 사용합니다.
-     */
-    suspend fun handleKakaoLogin(token: String): Boolean {
-        return try {
-            // 1. 요청 객체 생성
-            val request = LoginRequest(oauthToken = token)
-
-            // 2. NetworkModule에서 주입받은 apiService 사용
-            val response = apiService.login("kakao", request)
-
-            // 3. 응답 처리
-            if (response.isSuccessful && response.body()?.success == true) {
-                val serverToken = response.body()?.data?.jwt
-                Log.d("LOGIN", "서버 로그인 성공: $serverToken")
-
-                if (serverToken != null) {
-                    jwtToken = serverToken
-                    // TokenManager를 통해 토큰을 저장 (Interceptor에서 사용됨)
-                    tokenManager.saveAccessToken(serverToken)
-                    true
-                } else {
-                    false
-                }
-            } else {
-                Log.e("LOGIN", "로그인 실패: ${response.errorBody()?.string()}")
-                false
-            }
-        } catch (e: Exception) {
-            Log.e("LOGIN", "네트워크 오류 발생", e)
-            false
-        }
-    }
-
-    suspend fun uploadProfileAndSave(isUpdate: Boolean): ProfileLoadResult {
-        return try {
-            val currentUri = profileImageUri ?: return ProfileLoadResult.Error("이미지가 선택되지 않았습니다.")
-            val contentType = context.contentResolver.getType(currentUri) ?: "image/jpeg"
-
-            // 단계 1: Pre-signed URL 발급 받기
-            val urlResponse = apiService.getPresignedUrl(PresignedUrlRequest("PROFILE"))
-            if (!urlResponse.isSuccessful || urlResponse.body()?.success != true) {
-                return ProfileLoadResult.Error("업로드 URL 발급에 실패했습니다.")
-            }
-
-            val presignedData = urlResponse.body()!!.data!!
-            val uploadUrl = presignedData.uploadUrl
-            val imageKey = presignedData.imageKey
-
-            // 단계 2: S3에 이미지 업로드 (PUT)
-            // 로컬 Uri로부터 InputStream을 열어 RequestBody 생성
-            val inputStream = context.contentResolver.openInputStream(currentUri)
-            val byteArray = inputStream?.readBytes() ?: return ProfileLoadResult.Error("이미지를 읽을 수 없습니다.")
-            val requestBody = byteArray.toRequestBody("image/jpeg".toMediaTypeOrNull())
-
-            val s3Response = apiService.uploadImageToS3(uploadUrl, requestBody)
-            if (!s3Response.isSuccessful) {
-                return ProfileLoadResult.Error("S3 이미지 업로드에 실패했습니다.")
-            }
-
-            // 단계 3: 성공한 imageKey를 담아 프로필 수정 API 호출
-            updateUserProfile(imageKey, isUpdate)
-
-        } catch (e: Exception) {
-            Log.e("UPLOAD", "전체 프로세스 오류", e)
-            ProfileLoadResult.Error("처리 중 오류가 발생했습니다.")
-        }
-    }
-
-
-    suspend fun updateUserProfile(imageKey: String?, isUpdate: Boolean): ProfileLoadResult {
-        return try {
-            val rawBirthday = birthdayValue.text
-            val formattedBirthday = if (rawBirthday.length == 8) {
-                "${rawBirthday.substring(0, 4)}-${rawBirthday.substring(4, 6)}-${rawBirthday.substring(6, 8)}"
-            } else {
-                rawBirthday
-            }
-
-            // 2. 요청 객체 생성
-            val request = ProfileUpdateRequest(
-                nickname = nickname,
-                birthday = formattedBirthday,
-                imageKey = imageKey
-            )
-
-            val response = if (isUpdate) apiService.updateUserProfile(request) else apiService.uploadUserProfile(request)
-
-            if (response.isSuccessful && response.body()?.success == true) {
-                val updatedData = response.body()?.data
-                if (updatedData != null) {
-                    // 수정된 정보를 다시 상태값에 동기화
-                    nickname = updatedData.nickname
-
-                    ProfileLoadResult.Success
-                } else {
-                    ProfileLoadResult.Error("응답 데이터가 비어있습니다.")
-                }
-            } else {
-                val errorMsg = response.body()?.error?.message ?: "수정에 실패했습니다."
-                ProfileLoadResult.Error(errorMsg)
-            }
-        } catch (e: Exception) {
-            ProfileLoadResult.Error("네트워크 오류가 발생했습니다.")
-        }
-    }
-
-    suspend fun getUserProfile(): ProfileLoadResult {
-        Log.d("UserProfile", "getUserProfile 시작")
-        return try {
-            val response = apiService.getUserProfile()
-            Log.d("UserProfile", "getUserProfile 응답: $response")
-
-            if (response.isSuccessful) {
-                val commonResponse = response.body()
-
-                if (commonResponse?.success == true) {
-                    val profileData = commonResponse.data
-
-                    if (profileData != null) {
-                        // --- 1. UI 상태 변수 업데이트 ---
-                        nickname = profileData.nickname
-
-                        val pureBirthdayDigits = profileData.birthday.replace("-", "")
-                        birthdayValue = TextFieldValue(
-                            text = pureBirthdayDigits,
-                            selection = TextRange(pureBirthdayDigits.length)
-                        )
-
-                        profileImageUri = if (!profileData.profileImageUrl.isNullOrEmpty()) {
-                            Uri.parse(profileData.profileImageUrl)
-                        } else {
-                            null
-                        }
-
-                        Log.d("PROFILE", "프로필 로드 성공 (홈 이동)")
-                        ProfileLoadResult.Success
-                    } else {
-                        Log.d("PROFILE", "프로필 데이터 없음 (온보딩 이동)")
-                        ProfileLoadResult.Error("프로필 데이터 없음")
-                    }
-                } else {
-                    // 서버 내부 성공 플래그가 false인 경우 (예: 세션 만료 등)
-                    val errorMessage = commonResponse?.error?.message ?: "알 수 없는 에러가 발생했습니다."
-                    ProfileLoadResult.Error(errorMessage)
-                }
-            } else {
-                // HTTP 에러 (4xx, 5xx)
-                Log.d("PROFILE", "프로필 데이터 없음 (온보딩 이동)")
-                ProfileLoadResult.Error("HTTP 에러")
-
-//                val errorBody = response.errorBody()?.string()
-//                Log.e("PROFILE", "HTTP 에러: $errorBody")
-//                ProfileLoadResult.Error("서버와의 통신이 원활하지 않습니다.")
-            }
-        } catch (e: Exception) {
-            Log.e("PROFILE", "네트워크/런타임 오류", e)
-            ProfileLoadResult.Error("네트워크 연결을 확인해 주세요.")
-        }
     }
 
     suspend fun fetchUserStatus(): Result<ProfileSettingStatus> {
@@ -431,60 +204,11 @@ class MainViewModel @Inject constructor(
         return fetchUserStatus().getOrThrow()
     }
 
-
-    fun logout() {
-    }
-
     var deleteStep by mutableIntStateOf(1)
         private set
 
     fun updateDeleteStep(step: Int) {
         deleteStep = step
-    }
-
-    fun changeProfile() {
-        viewModelScope.launch {
-            _loading.value = true
-            try {
-                // 1) 이미지 업로드(있다면)
-                val imageKey: String? = profileImageUri?.let { uri ->
-                    // uploadImageAndGetKey returns Result<String>
-                    profileRepository.uploadImageAndGetKey(uri).getOrElse { throwable ->
-                        // 업로드 실패 시 예외 던지거나 null로 처리
-                        // 여기서는 에러로 처리
-                        throw throwable
-                    }
-                }
-
-                // 2) 프로필 요청 생성
-                val formattedBirthday = formatBirthday(birthdayValue.text)
-                val request = ProfileUpdateRequest(
-                    nickname = nickname,
-                    birthday = formattedBirthday,
-                    imageKey = imageKey
-                )
-
-                // 3) 서버에 업데이트
-                profileRepository.updateUserProfile(request).fold(
-                    onSuccess = {
-                        // 성공 처리: UI에 알림(예: 닫기, 토스트, 리프레시)
-                        _profileUpdated.emit(Unit)
-                    },
-                    onFailure = { throwable ->
-                        throw throwable
-                    }
-                )
-            } catch (e: Exception) {
-                val message = when (e) {
-                    is ApiException -> e.message
-                    is IOException -> "네트워크 오류가 발생했습니다."
-                    else -> e.message ?: "알 수 없는 오류가 발생했습니다."
-                }
-                _error.emit(message)
-            } finally {
-                _loading.value = false
-            }
-        }
     }
 
     fun completeOnboarding() {
@@ -767,12 +491,40 @@ class MainViewModel @Inject constructor(
     var questionData by mutableStateOf<CoupleQuestionData?>(null)
         private set
 
+    fun fetchTodayQuestionTest() {
+        viewModelScope.launch {
+            // 실제 API 호출 대신 예시 데이터 주입
+            val mockData = CoupleQuestionData(
+                coupleQuestionId = 505L,
+                question = "상대가 가장 사랑스러워 보였던 순간은 언제인가요?",
+                date = LocalDate.now(),
+                myInfo = UserAnswerInfo(
+                    userId = 1L,
+                    name = "나",
+                    profileThumbnailImageUrl = TestTest.testImageUrl,
+//                    questionImageUrl = "https://img1.daumcdn.net/thumb/R1280x0.fjpg/?fname=http://t1.daumcdn.net/brunch/service/user/1dEO/image/CIieqAqy0KlR6UdFHxrc1NsGtVM.jpg",
+                    questionImageUrl = null,
+                    answeredAt = "20:30"
+                ),
+                partnerInfo = UserAnswerInfo(
+                    userId = 2L,
+                    name = "상대방",
+                    profileThumbnailImageUrl = TestTest.testImageUrl,
+                    questionImageUrl = "https://img1.daumcdn.net/thumb/R1280x0.fjpg/?fname=http://t1.daumcdn.net/brunch/service/user/1dEO/image/CIieqAqy0KlR6UdFHxrc1NsGtVM.jpg",
+                    answeredAt = "21:00"
+                )
+            )
+
+            questionData = mockData
+        }
+    }
+
     // 질문 조회 로직
     fun fetchTodayQuestion() {
         viewModelScope.launch {
             try {
                 // 경로상의 ID를 모를 때는 "current" 혹은 서버 약속된 값을 사용
-                val response = apiService.getTodayQuestion("current")
+                val response = apiService.getTodayQuestion()
                 if (response.isSuccessful) {
                     questionData = response.body()?.data
                 }
@@ -781,7 +533,7 @@ class MainViewModel @Inject constructor(
     }
 
     // 2. 사진 서버 업로드 함수
-    fun uploadImage(uri: Uri) {
+    fun uploadTodayQuestionImage(uri: Uri) {
         val questionId = questionData?.coupleQuestionId ?: return
 
         viewModelScope.launch {
@@ -856,23 +608,39 @@ class MainViewModel @Inject constructor(
     var calendarDays by mutableStateOf<List<CalendarDayInfo>>(emptyList())
         private set
 
-    // 상세 화면용 데이터
-    var detailItems by mutableStateOf<List<ArchiveDateGroup>>(emptyList())
-        private set
+    var detailList by mutableStateOf<List<QuestionDetailResponse>>(emptyList())
 
+    var scrollIndex by mutableStateOf(0)
 
-    // 2. 상세 데이터 불러오기 (최신순 클릭 시 혹은 캘린더 클릭 시)
-    fun fetchDetail(date: String, targetId: Long? = null, targetType: String? = null) {
+    fun fetchDetailByDate(date: String, targetId: Long? = null, targetType: String? = null) {
         viewModelScope.launch {
             archiveRepository.getDetailByDate(date, targetId, targetType)
-                .onSuccess { data ->
-                    detailItems = data.archiveInfoList
+                .onSuccess { response ->
+                    // 1. ArchiveDateGroup 리스트를 QuestionDetailResponse 리스트로 매핑
+                    val mappedList = response.archiveInfoList.map { group ->
+                        QuestionDetailResponse(
+                            coupleQuestionId = targetId ?: 0L, // 식별용
+                            questionNumber = 0L,
+                            questionContent = "질문 내용", // 필요시 추가 필드 확인
+                            myInfo = group.myInfo,
+                            partnerInfo = group.partnerInfo
+                        )
+                    }
 
-                    // TODO: UI에서 detailItems 중 selected: true인 항목의 인덱스를 찾아
-                    // LazyColumn의 initialFirstVisibleItemIndex 등으로 전달해야 합니다.
+                    detailList = mappedList
+
+                    detailList = mappedList
+
+                    // [중요] 서버 응답에 selected 필드가 있다면 그걸로 인덱스 찾기
+                    val index = response.archiveInfoList.indexOfFirst { it.selected }
+                    scrollIndex = if (index != -1) index else 0
+
+                    // 상세 데이터가 준비되었음을 알림 (기존 detailData 변수 업데이트)
+                    selectedQuestionDetail = mappedList.getOrNull(scrollIndex)
                 }
         }
     }
+
 
     // 현재 사용자가 보고 있는 기준 날짜 (기본값: 오늘)
     var currentCalendarDate by mutableStateOf(LocalDate.now())
@@ -934,4 +702,19 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    fun ArchiveDateGroup.toQuestionDetail(myId: Long): QuestionDetailResponse {
+        // imageInfoList에서 내 정보와 상대방 정보를 분리
+        val myInfo = this.imageInfoList.find { it.userId == myId }
+        val partnerInfo = this.imageInfoList.find { it.userId != myId }
+
+        return QuestionDetailResponse(
+            coupleQuestionId = 0L, // JSON에 ID가 없다면 임시값 또는 필드 추가 필요
+            questionNumber = 0L,   // JSON에 없다면 필드 추가 필요
+            questionContent = "질문 내용이 여기에 들어갑니다.", // API 응답에 맞게 수정
+            myInfo = myInfo,
+            partnerInfo = partnerInfo
+        )
+    }
+
 }

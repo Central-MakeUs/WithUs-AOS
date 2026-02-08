@@ -7,6 +7,7 @@ plugins {
     id("kotlin-parcelize")
     alias(libs.plugins.hilt.android) // Hilt 플러그인 적용
     id("kotlin-kapt") // 또는 id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -26,7 +27,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.withus.app3"
+        applicationId = "com.yeogijeogi.withus"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -118,4 +119,7 @@ dependencies {
     implementation(libs.accompanist.permissions)
 
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 }

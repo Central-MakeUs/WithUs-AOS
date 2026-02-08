@@ -1,4 +1,3 @@
-import android.Manifest.permission.CAMERA
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -6,8 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.util.Log
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
@@ -18,7 +15,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,45 +58,33 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
-import com.google.accompanist.permissions.shouldShowRationale
 import com.kakao.sdk.share.ShareClient
 import com.kakao.sdk.template.model.Button
 import com.kakao.sdk.template.model.Content
 import com.kakao.sdk.template.model.FeedTemplate
 import com.kakao.sdk.template.model.Link
 import com.widthus.app.model.CalendarDay
+import com.widthus.app.model.LocalUserNickname
 import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
 import com.widthus.app.screen.AppNavigation
 import com.widthus.app.screen.BackButton
-import com.widthus.app.screen.EditMode
 import com.widthus.app.screen.ImageMediaManager
-import com.widthus.app.screen.Screen
-import com.widthus.app.utils.DateMaskTransformation
-import com.widthus.app.utils.Utils.calculateRemainingTime
-import com.widthus.app.utils.Utils.checkIsTimePassed
+import com.widthus.app.utils.isUriEmpty
+import com.widthus.app.viewmodel.AuthViewModel
 import com.widthus.app.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
-import java.io.File
 import java.util.Calendar
 import kotlin.collections.getOrNull
 import com.withus.app.R
@@ -256,7 +240,7 @@ fun CalendarHomeScreen(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun StepInputScreen(
-    viewModel: MainViewModel, mediaManager: ImageMediaManager,
+    viewModel: AuthViewModel, mediaManager: ImageMediaManager,
     onAllFinish: () -> Unit
 ) {
     // 이제 단계는 1(닉네임)과 4(프로필)만 사용합니다.
@@ -265,9 +249,10 @@ fun StepInputScreen(
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
 
+    val nickname = viewModel.currentUserInfo.nickname
     // 에러 상태 체크
     val isNicknameError =
-        viewModel.nickname.isNotEmpty() && (viewModel.nickname.length < 2 || viewModel.nickname.length > 8)
+        nickname.isNotEmpty() && (nickname.length !in 2..8)
     // 생일 에러: 입력이 시작되었으나 8자가 아닐 때
     val isBirthdayError = viewModel.birthdayValue.toString()
         .isNotEmpty() && viewModel.birthdayValue.toString().length < 8
@@ -278,7 +263,7 @@ fun StepInputScreen(
     debug("viewModel.birthdayValue.text='${raw}', digits='${digits}', textLen=${raw.length}, digitLen=${digits.length}, selection=${viewModel.birthdayValue.selection}")
     // 버튼 활성화 유효성 검사
     val currentValid = when (currentStep) {
-        1 -> viewModel.nickname.length in 2..8
+        1 -> nickname.length in 2..8
         2 -> {
             val digits = viewModel.birthdayValue.text.filter { it.isDigit() }
             // 8자리이면서 + 실제 유효한 날짜여야 true
@@ -336,7 +321,7 @@ fun StepInputScreen(
             Spacer(modifier = Modifier.height(60.dp))
 
             val currentText = if (currentStep == 1) {
-                viewModel.nickname
+                nickname
             } else {
                 viewModel.birthdayValue.toString() // 명시적으로 String 변환
             }
@@ -347,7 +332,7 @@ fun StepInputScreen(
                     // String인 nickname을 TextFieldValue로 변환 (커서 위치는 마지막으로 설정)
                     TextFieldValue(
                         text = currentText,
-                        selection = TextRange(viewModel.nickname.length)
+                        selection = TextRange(nickname.length)
                     )
                 } else {
                     // 이미 TextFieldValue인 birthdayValue 사용
@@ -423,7 +408,7 @@ fun StepInputScreen(
 
             } else {
                 // (4단계 프로필 등록 UI - 기존 코드 유지)
-                ProfileImagePicker(viewModel.profileImageUri) { showSheet = true }
+                ProfileImagePicker(viewModel.currentUserInfo.profileUrl) { showSheet = true }
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -478,7 +463,7 @@ fun StepInputScreen(
                         )
                     }, modifier = Modifier.clickable {
                         mediaManager.launchCamera {
-                            viewModel.profileImageUri = it
+                            viewModel.currentUserInfo.copy(profileUrl = it)
                         }
                     })
                     ListItem(headlineContent = { Text("앨범에서 가져오기") }, leadingContent = {
@@ -487,7 +472,7 @@ fun StepInputScreen(
                         )
                     }, modifier = Modifier.clickable {
                         mediaManager.launchGallery {
-                            viewModel.profileImageUri = it
+                            viewModel.currentUserInfo.copy(profileUrl = it)
                         }
                     })
                 }
@@ -1049,12 +1034,12 @@ fun MemoryGridSection() {
 @OptIn(ExperimentalMaterial3Api::class) // TopAppBar 사용을 위해 필요
 @Composable
 fun OnboardingConnectScreen(
-    viewModel: MainViewModel,
+    nickname: String,
     onInviteClick: () -> Unit,
     onEnterCodeClick: () -> Unit,
     onCloseClick: () -> Unit,
     topBar: @Composable () -> Unit,
-    title: String = "${viewModel.nickname}님, 가입을 축하드려요!",
+    title: String = "${nickname}님, 가입을 축하드려요!",
 ) {
     Scaffold(
         containerColor = Color.White, topBar = topBar
@@ -1216,7 +1201,6 @@ fun ConnectionPendingScreen(
 
 @Composable
 fun ConnectConfirmScreen(
-    viewModel: MainViewModel,
     onConfirmClick: (String) -> Unit,
     onLaterClick: () -> Unit,
     navController: NavHostController
@@ -1249,20 +1233,22 @@ fun ConnectConfirmScreen(
                 .background(Color(0xFFE6E6E6)),
             contentAlignment = Alignment.Center
         ) {
-            if (viewModel.profileImageUri != null) {
-                AsyncImage(
-                    model = viewModel.profileImageUri,
-                    contentDescription = "프로필 이미지",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
+            val profileImageUri = LocalUserNickname.current.profileUrl
+            if (profileImageUri == null) {
                 Icon(
                     Icons.Default.Person,
                     contentDescription = null,
                     modifier = Modifier.size(80.dp),
                     tint = Color.LightGray
                 )
+            } else {
+                AsyncImage(
+                    model = profileImageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+
             }
         }
 
@@ -1319,19 +1305,21 @@ fun ConnectCompleteScreen(
                 .background(Color(0xFFE6E6E6)),
             contentAlignment = Alignment.Center
         ) {
-            if (viewModel.profileImageUri != null) {
-                AsyncImage(
-                    model = viewModel.profileImageUri,
-                    contentDescription = "프로필 이미지",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
+            val profileImageUri = LocalUserNickname.current.profileUrl
+
+            if (isUriEmpty(profileImageUri)) {
                 Icon(
                     Icons.Default.Person,
                     contentDescription = null,
                     modifier = Modifier.size(80.dp),
                     tint = Color.LightGray
+                )
+            } else {
+                AsyncImage(
+                    model = profileImageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
         }
@@ -1344,19 +1332,22 @@ fun ConnectCompleteScreen(
                 .background(Color(0xFFE6E6E6)),
             contentAlignment = Alignment.Center
         ) {
-            if (viewModel.profileImageUri != null) {
-                AsyncImage(
-                    model = viewModel.profileImageUri,
-                    contentDescription = "프로필 이미지",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
+            val profileImageUri = LocalUserNickname.current.profileUrl
+
+
+            if (isUriEmpty(profileImageUri)) {
                 Icon(
                     Icons.Default.Person,
                     contentDescription = null,
                     modifier = Modifier.size(80.dp),
                     tint = Color.LightGray
+                )
+            } else {
+                AsyncImage(
+                    model = profileImageUri,
+                    contentDescription = "프로필 이미지",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
                 )
             }
         }
@@ -1876,7 +1867,9 @@ fun KeywordSelectionScreen(
 
         // --- 새로운 키워드 추가 바텀 시트 ---
         if (showAddSheet) {
-            AddKeywordBottomSheet(
+            AddTextBottomSheet(
+                title = "새로운 키워드 추가",
+                placeholderText = "키워드를 입력해주세요.",
                 onDismissRequest = { showAddSheet = false },
                 onKeywordAdded = { newKeyword ->
                     // 5. ViewModel을 통해 UI 리스트 업데이트
@@ -2048,7 +2041,8 @@ fun KeywordChip(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddKeywordBottomSheet(
+fun AddTextBottomSheet(
+    title: String, placeholderText: String,
     onDismissRequest: () -> Unit, onKeywordAdded: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
@@ -2066,7 +2060,7 @@ fun AddKeywordBottomSheet(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "새로운 키워드 추가",
+                text = title,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(vertical = 16.dp)
@@ -2076,7 +2070,15 @@ fun AddKeywordBottomSheet(
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = { Text("키워드를 입력해주세요.", color = Color.LightGray) },
+                placeholder = {
+                    Text(
+                        text = placeholderText,
+                        color = Color.LightGray,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
@@ -2116,9 +2118,6 @@ fun HomeScreen(
     myKeywords: List<String>,
     onNavigateToKeywordSelect: () -> Unit
 ) {
-    // ... (상단 탭 및 Scaffold 기존 코드와 동일) ...
-    // 변수 선언부 (mainTabs, selectedMainTab 등)는 기존 유지
-
     val mainTabs = listOf("오늘의 질문", "오늘의 일상")
     var selectedMainTab by remember { mutableStateOf("오늘의 질문") }
     var selectedDailyKeyword by remember(myKeywords) { mutableStateOf(myKeywords.firstOrNull()) }
@@ -2127,6 +2126,11 @@ fun HomeScreen(
     // 업로드 상태
     val userImageUri = viewModel.userUploadedImage
     val partnerImageUri = viewModel.partnerUploadedImage
+
+    LaunchedEffect(Unit) {
+//        viewModel.fetchTodayQuestion()
+        viewModel.fetchTodayQuestionTest()
+    }
 
     Scaffold(
         topBar = {
@@ -2180,7 +2184,7 @@ fun HomeScreen(
                 if (selectedMainTab == "오늘의 질문") {
                     TodayQuestionContent(
                         data = viewModel.questionData, // 질문용 데이터
-                        onUpload = { uri -> viewModel.uploadImage(uri) }, // 질문용 업로드
+                        onUpload = { uri -> viewModel.uploadTodayQuestionImage(uri) }, // 질문용 업로드
                         onPoke = { viewModel.pokePartner() },
                         showPokeDialog = viewModel.showPokeSuccessDialog,
                         onDismissPokeDialog = { viewModel.dismissPokeDialog() },
@@ -2348,19 +2352,32 @@ fun TodayQuestionContent(
     onDismissPokeDialog: () -> Unit,
     mediaManager: ImageMediaManager
 ) {
+    var showPhotoFlow by remember { mutableStateOf(false) }
+
     if (data == null) return // 로딩 중 처리
 
     // API 응답 기반 상태 정의
     val myInfo = data.myInfo
     val partnerInfo = data.partnerInfo
+    var showSheet by remember { mutableStateOf(false) }
 
     // 사진 업로드 여부 판단
-    val isUserUploaded = myInfo?.questionImageUrl != null
-    val isPartnerUploaded = partnerInfo?.questionImageUrl != null
+    val isUserUploaded = myInfo.questionImageUrl != null
+    val isPartnerUploaded = partnerInfo.questionImageUrl != null
 
     // 콕 찌르기 다이얼로그
     if (showPokeDialog) {
         PokeSuccessDialog(onDismiss = onDismissPokeDialog)
+    }
+
+    if (showPhotoFlow) {
+        PhotoFlowDialog(
+            onFinish = { uri ->
+                showPhotoFlow = false
+                onUpload(uri) // 최종 결과물 처리
+            },
+            onCancel = { showPhotoFlow = false }
+        )
     }
 
     if (isUserUploaded) {
@@ -2462,13 +2479,31 @@ fun TodayQuestionContent(
                     }
 
                     Button(
-                        onClick = { mediaManager.launchGallery { uri -> onUpload(uri) } },
+                        onClick = {
+                            showSheet = true
+                        },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
                     ) {
                         Text("사진 전송하기", fontWeight = FontWeight.Bold)
                     }
+
+                    val text = if (isPartnerOnly) "내 사진을 공유하고 상대의 사진을 확인해보세요." else "먼저 오늘의 질문에 답해보세요."
+                    Text(text, color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(vertical = 16.dp))
+
+
+                    ImageBottomSheet(
+                        showSheet = showSheet,
+                        onDismiss = { showSheet = false },
+                        onCameraClick = {
+                            showSheet = false
+                            showPhotoFlow = true // 다이얼로그 실행
+                        },
+                        onGalleryClick = { mediaManager.launchGallery {
+                            onUpload(it)
+                        } }
+                    )
                 }
             }
         }
@@ -2637,101 +2672,6 @@ fun DailyEmptyContent(onRegisterClick: () -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
         ) {
             Text("키워드 등록하기", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-// --- [UI 컴포넌트] 오늘의 일상 - 업로드 화면 (Case B: 마지막 사진 스타일) ---
-@Composable
-fun DailyUploadScreen(
-    keyword: String,
-    isUserUploaded: Boolean,
-    viewModel: MainViewModel,
-    mediaManager: ImageMediaManager,
-    onReselect: () -> Unit
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // 타이틀 (예: 오늘의 '지금 이순간' 사진을 보내주세요.)
-        Text(
-            text = "오늘의 일상",
-            fontSize = 14.sp,
-            color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            buildAnnotatedString {
-                append("오늘의 '")
-                withStyle(style = SpanStyle(fontWeight = FontWeight.ExtraBold)) {
-                    append(keyword)
-                }
-                append("' 사진을\n보내주세요.")
-            },
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            lineHeight = 30.sp
-        )
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        if (isUserUploaded) {
-            // 업로드 완료 시 카드 보여주기 (기존 컴포넌트 재사용)
-            UploadedContentCard(
-                userImageUri = viewModel.userUploadedImage,
-                partnerImageUri = null, // 일상은 혼자 올릴 수도 있으므로 null 처리 고려
-                userComment = "일상 기록 완료!",
-                partnerComment = "",
-                isUserUploaded = true,
-                isPartnerUploaded = false,
-                onUploadClick = {}
-            )
-        } else {
-            // 업로드 전: 회색 박스 (마지막 사진 스타일)
-            Box(
-                modifier = Modifier
-                    .size(240.dp) // 정사각형에 가까운 둥근 박스
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0xFFD9D9D9)), // 진한 회색
-                contentAlignment = Alignment.Center
-            ) {
-                // 비어있는 상태
-            }
-
-            Spacer(modifier = Modifier.height(40.dp))
-
-            // 검정색 버튼
-            Button(
-                onClick = {
-                    mediaManager.launchCamera { uri ->
-                        viewModel.userUploadedImage = uri
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
-            ) {
-                Text(
-                    text = "사진 전송하기",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 키워드 다시 고르기 (선택 사항)
-            TextButton(onClick = onReselect) {
-                Text(
-                    "키워드 다시 선택하기",
-                    color = Color.Gray,
-                    fontSize = 14.sp,
-                    textDecoration = TextDecoration.Underline
-                )
-            }
         }
     }
 }
@@ -2999,7 +2939,7 @@ fun ProfileImagePicker(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
-fun ProfileImageBottomSheet(
+fun ImageBottomSheet(
     showSheet: Boolean,
     onDismiss: () -> Unit,
     onCameraClick: () -> Unit,
@@ -3016,12 +2956,6 @@ fun ProfileImageBottomSheet(
                     .fillMaxWidth()
                     .padding(bottom = 40.dp, start = 20.dp, end = 20.dp)
             ) {
-                Text(
-                    "프로필 사진 설정",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
 
                 ListItem(
                     headlineContent = { Text("사진 촬영") },

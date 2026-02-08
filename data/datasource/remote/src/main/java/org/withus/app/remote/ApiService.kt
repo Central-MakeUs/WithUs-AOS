@@ -6,7 +6,9 @@ import org.withus.app.model.ArchiveResponse
 import org.withus.app.model.CalendarResponse
 import org.withus.app.model.CommonResponse
 import org.withus.app.model.CoupleKeywordsData
+import org.withus.app.model.CoupleProfileResponse
 import org.withus.app.model.CoupleQuestionData
+import org.withus.app.model.CreateMemoryRequest
 import org.withus.app.model.DailyImageRequest
 import org.withus.app.model.InvitationCodeData
 import org.withus.app.model.JoinCoupleData
@@ -16,6 +18,7 @@ import org.withus.app.model.KeywordListResponse
 import org.withus.app.model.KeywordUpdateRequest
 import org.withus.app.model.KeywordsData
 import org.withus.app.model.LoginResponse
+import org.withus.app.model.MemoryResponse
 import org.withus.app.model.PresignedUrlData
 import org.withus.app.model.ProfileResponse
 import org.withus.app.model.QuestionArchiveResponse
@@ -23,6 +26,7 @@ import org.withus.app.model.QuestionDetailResponse
 import org.withus.app.model.QuestionImageRequest
 import org.withus.app.model.StatusData
 import org.withus.app.model.request.LoginRequest
+import org.withus.app.model.request.LogoutRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
 import retrofit2.Response
@@ -110,10 +114,8 @@ interface ApiService {
         @Path("userId") userId: Long
     ): Response<CommonResponse<Unit>>
 
-    @GET("/api/me/couple/questions/{coupleQuestionId}/image")
-    suspend fun getTodayQuestion(
-        @Path("coupleQuestionId") coupleQuestionId: String // 초기 호출 시 "current" 등으로 보낼 수 있음
-    ): Response<CommonResponse<CoupleQuestionData>>
+    @GET("/api/me/couple/questions/image")
+    suspend fun getTodayQuestion(): Response<CommonResponse<CoupleQuestionData>>
 
     // 2. 오늘의 질문 사진 업로드
     @POST("/api/me/couple/questions/{coupleQuestionId}/image")
@@ -123,7 +125,7 @@ interface ApiService {
     ): Response<CommonResponse<Unit>>
 
     @GET("/api/me/couple/keywords/{coupleKeywordId}/today")
-    suspend fun getTodayDaily(
+    suspend fun getTodayKeywords(
         @Path("coupleKeywordId") coupleKeywordId: Long
     ): Response<CommonResponse<CoupleQuestionData>> // 응답 구조가 질문과 같으므로 모델 재사용
 
@@ -171,4 +173,31 @@ interface ApiService {
     suspend fun getQuestionArchiveDetail(
         @Path("coupleQuestionId") coupleQuestionId: Long
     ): Response<CommonResponse<QuestionDetailResponse>>
+
+    @GET("/api/me/couple/memories")
+    suspend fun getMemories(
+        @Query("monthKey") monthKey: String // YYYYMM 형식
+    ): Response<CommonResponse<MemoryResponse>>
+
+    // 추억 생성 API 추가
+    @POST("/api/me/couple/memories/{weekEndDate}")
+    suspend fun createMemoryWithDate(
+        @Path("weekEndDate") weekEndDate: String,
+        @Body request: CreateMemoryRequest
+    ): Response<CommonResponse<Unit>>
+
+    // 2. 주차 정보 없이 저장 시 (기본값 처리 등)
+    @POST("/api/me/couple/memories")
+    suspend fun createMemoryNoDate(
+        @Body request: CreateMemoryRequest
+    ): Response<CommonResponse<Unit>>
+
+    @POST("/api/auth/logout")
+    suspend fun logout(
+        @Body request: LogoutRequest
+    ): Response<CommonResponse<Unit>>
+
+    @GET("/api/me/couple/profile")
+    suspend fun getCoupleProfile(): Response<CommonResponse<CoupleProfileResponse>>
+
 }

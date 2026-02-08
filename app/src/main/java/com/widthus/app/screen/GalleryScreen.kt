@@ -24,6 +24,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,6 +42,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
@@ -64,6 +68,8 @@ import com.widthus.app.model.QuestionAnswer
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
 import kotlinx.coroutines.launch
+import org.withus.app.debug
+import org.withus.app.model.ArchiveDetailItem
 import org.withus.app.model.ArchiveQuestionItem
 import org.withus.app.model.CalendarDayInfo
 import org.withus.app.model.CoupleQuestionData
@@ -88,6 +94,12 @@ fun GalleryScreen(
     val selectedIds = remember { mutableStateListOf<Long>() } // ID를 Int(coupleQuestionId)로 관리
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    val isEmpty = when (viewMode) {
+        ViewMode.LATEST -> viewModel.archiveItems.isEmpty()
+        ViewMode.QUESTION -> viewModel.archiveQuestions.isEmpty()
+        ViewMode.CALENDAR -> viewModel.calendarDays.isEmpty()
+    }
+
     LaunchedEffect(viewMode) {
         when (viewMode) {
             ViewMode.LATEST -> {
@@ -106,149 +118,186 @@ fun GalleryScreen(
     }
 
     val detailData = viewModel.selectedQuestionDetail
-    if (selectedQuestionIndex != null && detailData != null) {
-        QuestionDetailScreen(data = detailData, onBack = {
-            selectedQuestionIndex = null
-            // 상세 데이터 초기화 로직이 필요하다면 viewModel에서 처리
-        }, onDelete = {
-            // 삭제 API 연결
-            showDeleteDialog = true
-        })
-    } else {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White)
-        ) {
-            Scaffold(topBar = {
-                Column(modifier = Modifier.background(Color.White)) {
-                    CenterAlignedTopAppBar(
-                        title = { Text("추억", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
-                        actions = {
-                            if (!isSelectionMode) {
-                                IconButton(onClick = { isSelectionMode = true }) {
-                                    Icon(Icons.Default.MoreHoriz, "더보기", tint = Color.Black)
-                                }
-                            } else {
-                                TextButton(onClick = {
-                                    isSelectionMode = false
-                                    selectedIds.clear()
-                                }) { Text("취소", color = Color.Black) }
-                            }
-                        },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
-                    )
 
-                    if (!isSelectionMode) {
+    val detailDataList = viewModel.detailList // 리스트 전체를 가져옵니다
+
+    debug("selectedQuestionIndex : $selectedQuestionIndex")
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+    ) {
+
+        if (selectedQuestionIndex != null && detailData != null) {
+            DetailListWrapper(
+                items = detailDataList,
+                initialIndex = viewModel.scrollIndex,
+                onBack = {
+                    selectedQuestionIndex = null
+                    viewModel.detailList = emptyList() // 데이터 초기화
+                },
+                onDelete = {
+                    // 삭제 API 연결
+                    showDeleteDialog = true
+                }
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White)
+            ) {
+                Scaffold(topBar = {
+                    Column(modifier = Modifier.background(Color.White)) {
+                        CenterAlignedTopAppBar(
+                            title = { Text("추억", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                            actions = {
+                                if (!isSelectionMode) {
+                                    IconButton(onClick = { isSelectionMode = true }) {
+                                        Icon(Icons.Default.MoreHoriz, "더보기", tint = Color.Black)
+                                    }
+                                } else {
+                                    TextButton(onClick = {
+                                        isSelectionMode = false
+                                        selectedIds.clear()
+                                    }) { Text("취소", color = Color.Black) }
+                                }
+                            },
+                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
+                        )
+
+                        if (!isSelectionMode) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ViewModeToggle(
+                                    currentMode = viewMode, onModeChanged = { viewMode = it })
+                            }
+                        }
+                    }
+                }, bottomBar = {
+                    if (isSelectionMode) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 16.dp),
-                            contentAlignment = Alignment.Center
+                                .padding(16.dp)
+                                .navigationBarsPadding()
                         ) {
-                            ViewModeToggle(
-                                currentMode = viewMode, onModeChanged = { viewMode = it })
-                        }
-                    }
-                }
-            }, bottomBar = {
-                if (isSelectionMode) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .navigationBarsPadding()
-                    ) {
-                        Button(
-                            onClick = { showDeleteDialog = true },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(
-                                    0xFF222222
+                            Button(
+                                onClick = { showDeleteDialog = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(
+                                        0xFFFFFF
+                                    )
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                enabled = selectedIds.isNotEmpty()
+                            ) {
+                                Text(
+                                    "${selectedIds.size}장의 사진 삭제하기",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
                                 )
-                            ),
-                            shape = RoundedCornerShape(12.dp),
+                            }
+                        }
+                    }
+                }) { paddingValues ->
+
+                    if (isEmpty && !viewModel.isLoading) {
+                        ArchiveEmptyView()
+                    } else {
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            enabled = selectedIds.isNotEmpty()
+                                .fillMaxSize()
+                                .padding(paddingValues)
                         ) {
-                            Text(
-                                "${selectedIds.size}장의 사진 삭제하기",
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-            }) { paddingValues ->
-                Column(
-                    modifier = Modifier
-                        .padding(paddingValues)
-                        .fillMaxSize()
-                ) {
-                    when (viewMode) {
-                        ViewMode.LATEST -> {
-                            LatestGridView(
-                                items = viewModel.archiveItems, // (String, UserAnswerInfo) 페어 리스트
-                                isSelectionMode = isSelectionMode,
-                                selectedIds = selectedIds,
-                                onToggleSelect = { id ->
-                                    // 선택 로직: 리스트에 있으면 제거, 없으면 추가
-                                    if (selectedIds.contains(id)) selectedIds.remove(id)
-                                    else selectedIds.add(id)
-                                },
-                                onLongClick = { id ->
-                                    if (!isSelectionMode) {
-                                        isSelectionMode = true
-                                        selectedIds.add(id)
+                            Box(modifier = Modifier.weight(1f)) {
+
+                                when (viewMode) {
+                                    ViewMode.LATEST -> {
+                                        LatestGridView(
+                                            items = viewModel.archiveItems, // (String, UserAnswerInfo) 페어 리스트
+                                            isSelectionMode = isSelectionMode,
+                                            selectedIds = selectedIds,
+                                            onToggleSelect = { id ->
+                                                // 선택 로직: 리스트에 있으면 제거, 없으면 추가
+                                                if (selectedIds.contains(id)) selectedIds.remove(id)
+                                                else selectedIds.add(id)
+                                            },
+                                            onLongClick = { id ->
+                                                if (!isSelectionMode) {
+                                                    isSelectionMode = true
+                                                    selectedIds.add(id)
+                                                }
+                                            },
+                                            onItemClick = { index ->
+                                                val (date, info) = viewModel.archiveItems[index]
+
+                                                // 2. 상세 API 호출 (아이템 식별을 위해 id와 type 전달)
+                                                viewModel.fetchDetailByDate(
+                                                    date = date,
+                                                    targetId = info.userId,          // UserAnswerInfo에 id 필드가 있어야 함
+//                                            targetType = info. // UserAnswerInfo에 archiveType 필드가 있어야 함
+                                                )
+
+                                                // 3. 인덱스 설정 (이 값이 null이 아니게 되어 상세 화면이 뜸)
+                                                selectedQuestionIndex = index
+                                            },
+                                            loadMore = {
+                                                viewModel.fetchArchives() // 스크롤 하단 도달 시 추가 데이터 로드
+                                            })
                                     }
-                                },
-                                onItemClick = { index ->
-                                    selectedQuestionIndex = index
-                                },
-                                loadMore = {
-                                    viewModel.fetchArchives() // 스크롤 하단 도달 시 추가 데이터 로드
-                                })
-                        }
 
-                        ViewMode.CALENDAR -> {
-                            CalendarListView(
-                                viewModel = viewModel, onDateClick = {
-                                    selectedQuestionIndex = 0
-                                })
-                        }
+                                    ViewMode.CALENDAR -> {
+                                        CalendarListView(
+                                            viewModel = viewModel, onDateClick = { clickedDate ->
+                                                viewModel.fetchDetailByDate(date = clickedDate)
+                                                selectedQuestionIndex = 0
+                                            })
+                                    }
 
-                        ViewMode.QUESTION -> {
-                            QuestionListView(
-                                questions = viewModel.archiveQuestions,
-                                onQuestionClick = { index, item ->
-                                    // 상세 API 호출
-                                    viewModel.fetchQuestionDetail(item.coupleQuestionId)
-                                    // 화면 전환 상태 업데이트
-                                    selectedQuestionIndex = index
-                                },
-                                loadMore = { viewModel.fetchQuestionArchives() })
+                                    ViewMode.QUESTION -> {
+                                        QuestionListView(
+                                            questions = viewModel.archiveQuestions,
+                                            onQuestionClick = { index, item ->
+                                                // 상세 API 호출
+                                                viewModel.fetchQuestionDetail(item.coupleQuestionId)
+                                                // 화면 전환 상태 업데이트
+                                                selectedQuestionIndex = index
+                                            },
+                                            loadMore = { viewModel.fetchQuestionArchives() })
+                                    }
+                                }
+
+                            }
                         }
                     }
                 }
-            }
 
-            // === 삭제 확인 다이얼로그 ===
-            if (showDeleteDialog) {
-                DeleteConfirmDialog(
-                    count = selectedIds.size,
-                    onDismiss = { showDeleteDialog = false },
-                    onConfirm = {
-                        // 실제 삭제 로직 수행
-                        // viewModel.delete(selectedIds)
-                        showDeleteDialog = false
-                        isSelectionMode = false
-                        selectedIds.clear()
-                    })
+                // === 삭제 확인 다이얼로그 ===
+                if (showDeleteDialog) {
+                    DeleteConfirmDialog(
+                        count = selectedIds.size,
+                        onDismiss = { showDeleteDialog = false },
+                        onConfirm = {
+                            // 실제 삭제 로직 수행
+                            // viewModel.delete(selectedIds)
+                            showDeleteDialog = false
+                            isSelectionMode = false
+                            selectedIds.clear()
+                        })
+                }
             }
         }
-    }
-}
+
+    }}
 
 // ====================================================================
 // 🧩 하위 컴포넌트들
@@ -435,11 +484,7 @@ fun CalendarListView(
                         year = viewDate.year,
                         month = viewDate.monthValue,
                         calendarDays = calendarData,
-                        onDayClick = { clickedDate ->
-                            // 상세 조회 API 호출 후 화면 이동
-                            viewModel.fetchDetail(clickedDate)
-                            onDateClick(clickedDate)
-                        })
+                        onDayClick = onDateClick)
                 }
             }
         }
@@ -656,7 +701,6 @@ fun QuestionDetailScreen(
     val graphicsLayer = rememberGraphicsLayer() // 캡처를 위한 레이어
     val context = LocalContext.current
 
-
     // 사진이 둘 다 없는 경우 체크
     val isBothEmpty =
         data.myInfo?.questionImageUrl == null && data.partnerInfo?.questionImageUrl == null
@@ -752,6 +796,7 @@ fun QuestionDetailScreen(
     }
 }
 
+
 @Composable
 fun DetailPhotoSection(info: UserAnswerInfo, modifier: Modifier) {
     Box(modifier = modifier.fillMaxWidth()) {
@@ -783,7 +828,7 @@ fun DetailPhotoSection(info: UserAnswerInfo, modifier: Modifier) {
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(text = info.answeredAt, color = Color.White.copy(0.8f), fontSize = 11.sp)
+                Text(text = info.answeredAt ?: "", color = Color.White.copy(0.8f), fontSize = 11.sp)
             }
         }
 
@@ -1095,5 +1140,324 @@ private fun shareToInstagram(context: Context, bitmap: ImageBitmap) {
         context.startActivity(intent)
     } catch (e: Exception) {
         Toast.makeText(context, "인스타그램 앱이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+fun ArchiveEmptyView() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(vertical = 80.dp), // 하단 탭바 고려
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+
+        Text(
+            text = "저장된 사진이 없어요",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Black
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Image(
+            painter = painterResource(id = R.drawable.img_not_connected_yet),
+            contentDescription = null,
+            modifier = Modifier.size(120.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "연인과 사진을 공유하면\n이곳에 차곡차곡 저장돼요.",
+            fontSize = 16.sp,
+            color = Color.Gray,
+            textAlign = TextAlign.Center,
+            lineHeight = 24.sp
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class) // Pager 사용을 위해 필요
+@Composable
+fun DetailListWrapper(
+    items: List<QuestionDetailResponse>,
+    initialIndex: Int,
+    onBack: () -> Unit,
+    onDelete: () -> Unit
+) {
+    // 1. Pager 상태 관리 (현재 몇 번째 페이지인지)
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex,
+        pageCount = { items.size }
+    )
+
+    // 현재 보고 있는 페이지의 데이터
+    val currentItem = items.getOrNull(pagerState.currentPage)
+
+    Scaffold(
+        containerColor = Color.White,
+        topBar = {
+            // 상단: 뒤로가기 / 날짜 / 삭제 버튼
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = currentItem?.myInfo?.answeredAt ?: "", // 데이터에 날짜가 있다면 표시
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBackIosNew, contentDescription = "뒤로가기")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "삭제")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
+            )
+        },
+        bottomBar = {
+            // 하단: 공유/다운로드 버튼들 (스크린샷 하단 동그라미 버튼 3개)
+            // 기존 QuestionDetailBottomBar 사용하거나 직접 구현
+            QuestionDetailBottomBar(
+                onShare = { /* 공유 로직 */ },
+                onInstagram = { /* 인스타 로직 */ },
+                onDownload = { /* 다운로드 로직 */ }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            // 2. 질문 제목 (예: "오운완")
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = currentItem?.questionContent ?: "",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 3. 가로 스와이프 페이저 (여기가 핵심!)
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .weight(1f) // 남은 공간 꽉 채우기
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 30.dp), // 양옆 살짝 보이게 (선택사항)
+                pageSpacing = 16.dp // 카드 사이 간격
+            ) { page ->
+                // 각 페이지의 카드 내용
+                val itemData = items[page]
+                DetailCardItem(data = itemData)
+            }
+
+            // 4. 페이지 인디케이터 (점, 점, 점)
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .height(20.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                repeat(items.size) { iteration ->
+                    val color = if (pagerState.currentPage == iteration) Color.Black else Color.LightGray
+                    Box(
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .size(8.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DetailListWrapper2(
+    items: List<QuestionDetailResponse>,
+    initialIndex: Int,
+    onBack: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val listState = rememberLazyListState()
+
+    // 데이터가 로드되면 해당 위치로 스크롤
+    LaunchedEffect(initialIndex) {
+        if (items.isNotEmpty()) {
+            listState.scrollToItem(initialIndex)
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("상세 조회", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBackIosNew, contentDescription = "뒤로가기")
+                    }
+                }
+            )
+        },
+    ) { paddingValues ->
+        // 2. 중요: Box나 Column으로 감싸고 반드시 fillMaxSize를 먼저 줍니다.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()           // 이 부분이 없으면 LazyColumn이 무한대 높이를 가지려 합니다.
+                .padding(paddingValues)  // Scaffold의 상단바 영역만큼 패딩 처리
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(), // 3. 리스트도 꽉 채우기
+            ) {
+                items(items) { item ->
+                    // 상세 카드 레이아웃 (알맹이)
+                    QuestionDetailScreen(
+                        data = item,
+                        onBack = onBack,
+                        onDelete = onDelete
+                    )
+
+                    Spacer(modifier = Modifier.height(40.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DetailCardItem(data: QuestionDetailResponse) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        val hasMyInfo = data.myInfo != null
+        val hasPartnerInfo = data.partnerInfo != null
+        val singleInfo = data.myInfo ?: data.partnerInfo
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (hasMyInfo && hasPartnerInfo) {
+                // 1. 둘 다 있을 때: 기존처럼 50/50 배분
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        PhotoSection(info = data.myInfo!!, isTop = true)
+                    }
+                    Divider(color = Color.White, thickness = 2.dp)
+                    Box(modifier = Modifier.weight(1f)) {
+                        PhotoSection(info = data.partnerInfo!!, isTop = false)
+                    }
+                }
+            } else if (singleInfo != null) {
+                // 2. 하나만 있을 때: 전체 배경 블러 + 중앙 원본
+
+                // [배경] 전체 영역에 블러 처리된 이미지 배치
+                AsyncImage(
+                    model = singleInfo.questionImageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(30.dp) // 블러 강도 조절
+                )
+
+                // [배경 딤 처리] 블러 이미지를 살짝 어둡게 (선택사항)
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+
+                // [중앙 원본] 25% ~ 75% 영역 (weight 0.5 : 1 : 0.5)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Spacer(modifier = Modifier.weight(0.5f))
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        PhotoSection(
+                            info = singleInfo,
+                            isTop = true // 테두리 둥글게 등 기존 스타일 유지
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(0.5f))
+                }
+            } else {
+                EmptyPhotoPlaceholder("등록된 사진이 없습니다.")
+            }
+        }
+    }
+}
+
+@Composable
+fun PhotoSection(info: UserAnswerInfo, isTop: Boolean) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 배경 이미지
+        AsyncImage(
+            model = info.questionImageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // 오버레이 정보 (프로필, 이름, 시간)
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .align(Alignment.TopStart),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 프로필 썸네일
+            AsyncImage(
+                model = info.profileThumbnailImageUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, Color.White, CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(text = info.name, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(text = info.answeredAt ?: "", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+            }
+        }
+
+//        // 말풍선 (중앙 하단) - 예: "오빠 이때 잘생겼어!"
+//        // 데이터 모델에 comment 필드가 있다면 여기에 표시
+//        Box(
+//            modifier = Modifier
+//                .align(Alignment.BottomCenter)
+//                .padding(bottom = 20.dp)
+//                .background(Color.Black.copy(0.6f), RoundedCornerShape(16.dp))
+//                .padding(horizontal = 16.dp, vertical = 8.dp)
+//        ) {
+//            Text("코멘트", color = Color.White)
+//        }
+    }
+}
+
+@Composable
+fun EmptyPhotoPlaceholder(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFEEEEEE)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = Color.Gray)
     }
 }

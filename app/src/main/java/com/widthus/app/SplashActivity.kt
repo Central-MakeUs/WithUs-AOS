@@ -75,7 +75,7 @@ class SplashActivity : ComponentActivity() {
                 targetValue = 1f,
                 animationSpec = tween(500)
             )
-            delay(1000L)
+            delay(100L)
             Intent(this@SplashActivity, MainActivity::class.java).apply {
                 setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             }.let { intent ->

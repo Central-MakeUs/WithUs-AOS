@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "878129104166",
+    "project_id": "withus-cmc",
+    "storage_bucket": "withus-cmc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:878129104166:android:c8a8d067282f37c8e1ede7",
+        "android_client_info": {
+          "package_name": "com.yeogijeogi.withus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqPVMUVPZCYgksSUi8-s2rKsJltKBvOlk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

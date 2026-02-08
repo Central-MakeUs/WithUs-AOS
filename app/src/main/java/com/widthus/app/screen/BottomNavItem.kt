@@ -30,34 +30,43 @@ fun MainBottomNavigationBar(
         BottomNavItem.My
     )
 
-    NavigationBar(
-        containerColor = Color.White,
-        tonalElevation = 8.dp
-    ) {
-        items.forEach { item ->
-            val isSelected = currentRoute == item.route
-            NavigationBarItem(
-                selected = isSelected,
-                onClick = { onItemSelected(item) },
-                icon = {
-                    Icon(
-                        painter = painterResource(id = item.icon),
-                        contentDescription = item.label,
-                        modifier = Modifier.size(24.dp),
-                        tint = if (isSelected) Color.Black else Color.Gray
+    Column {
+        // 2. 가로 한 줄 그기
+        HorizontalDivider(
+            modifier = Modifier.fillMaxWidth(),
+            thickness = 1.dp,
+            color = Color(0xFFF8F8F8) // 연한 회색 (아이콘의 Gray보다 더 연한 색 추천)
+        )
+
+        NavigationBar(
+            containerColor = Color.White,
+            tonalElevation = 8.dp
+        ) {
+            items.forEach { item ->
+                val isSelected = currentRoute == item.route
+                NavigationBarItem(
+                    selected = isSelected,
+                    onClick = { onItemSelected(item) },
+                    icon = {
+                        Icon(
+                            painter = painterResource(id = item.icon),
+                            contentDescription = item.label,
+                            modifier = Modifier.size(24.dp),
+                            tint = if (isSelected) Color.Black else Color.Gray
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = item.label,
+                            fontSize = 12.sp,
+                            color = if (isSelected) Color.Black else Color.Gray
+                        )
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        indicatorColor = Color.Transparent // 클릭 시 생기는 원형 배경 제거
                     )
-                },
-                label = {
-                    Text(
-                        text = item.label,
-                        fontSize = 12.sp,
-                        color = if (isSelected) Color.Black else Color.Gray
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = Color.Transparent // 클릭 시 생기는 원형 배경 제거
                 )
-            )
+            }
         }
     }
 }

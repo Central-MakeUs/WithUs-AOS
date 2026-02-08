@@ -6,7 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Authenticator
 import okhttp3.OkHttpClient
-import org.koiware.demo.token.AuthAuthenticator
+import org.withus.app.token.AuthAuthenticator
 import org.withus.app.token.TokenManager
 import org.withus.app.remote.ApiService
 import org.withus.app.remote.CombinedAuthLoggingInterceptor

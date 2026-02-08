@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -91,7 +93,7 @@ fun PhotoEditorScreen(
     imageUri: Uri,
     isSent: Boolean,
     onClose: () -> Unit,
-    onSendComplete: () -> Unit // 전송(저장) 완료 콜백 이름 변경
+    onSendCompleteWithUri: (Uri) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -127,7 +129,7 @@ fun PhotoEditorScreen(
                 isSaving = false
                 if (savedUri != null) {
                     Toast.makeText(context, "이미지가 전송되었습니다!", Toast.LENGTH_SHORT).show()
-                    onSendComplete() // 상태 업데이트 및 완료 처리
+                    onSendCompleteWithUri(savedUri)
                 } else {
                     Toast.makeText(context, "이미지 저장 실패", Toast.LENGTH_SHORT).show()
                 }
@@ -554,26 +556,35 @@ fun EditorMenuBottomSheet(
 }
 
 @Composable
-fun PhotoFlowScreen() {
+fun PhotoFlowScreen(
+    onFinish: (Uri) -> Unit, // 최종 Uri를 전달할 콜백
+    onCancel: () -> Unit     // 중간에 닫았을 때 처리
+) {
     var capturedUri by remember { mutableStateOf<Uri?>(null) }
-    var isSent by remember { mutableStateOf(false) }
+    // 편집 완료 후 저장된 Uri를 담을 상태
+    var finalSavedUri by remember { mutableStateOf<Uri?>(null) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
         if (capturedUri == null) {
-            CameraCaptureScreen(onImageCaptured = { capturedUri = it })
+            CameraCaptureScreen(
+                onImageCaptured = { capturedUri = it },
+                onClose = onCancel // 카메라 단계에서 닫기 버튼 대응
+            )
         } else {
             PhotoEditorScreen(
                 imageUri = capturedUri!!,
-                isSent = isSent,
-                onClose = { capturedUri = null; isSent = false },
-                onSendComplete = { isSent = true } // 콜백 이름 변경 반영
+                isSent = false, // 초기값
+                onClose = { capturedUri = null }, // 편집 취소 시 카메라로 이동
+                onSendCompleteWithUri = { uri ->
+                    // [핵심] 저장 완료 시 부모에게 Uri 전달
+                    onFinish(uri)
+                }
             )
         }
     }
 }
-
 @Composable
-fun CameraCaptureScreen(onImageCaptured: (Uri) -> Unit) {
+fun CameraCaptureScreen(onImageCaptured: (Uri) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraController = remember { LifecycleCameraController(context) }
@@ -719,5 +730,28 @@ fun fetchLocation(context: Context, onResult: (String) -> Unit) {
         }
     } catch (e: Exception) {
         onResult("위치 에러")
+    }
+}
+
+@Composable
+fun PhotoFlowDialog(
+    onFinish: (Uri) -> Unit,
+    onCancel: () -> Unit
+) {
+    // DialogProperties를 설정하여 시스템 기본 너비를 무시하고 전체 화면을 채웁니다.
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false, // 전체 화면 사용을 위해 필수
+            dismissOnBackPress = true
+        )
+    ) {
+        // 내부에서 PhotoFlowScreen을 호출
+        Box(modifier = Modifier.fillMaxSize()) {
+            PhotoFlowScreen(
+                onFinish = onFinish,
+                onCancel = onCancel
+            )
+        }
     }
 }

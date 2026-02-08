@@ -1,5 +1,6 @@
 package com.widthus.app.utils
 
+import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
 import java.time.LocalTime
@@ -50,6 +51,8 @@ object Utils {
             false
         }
     }
+}
 
-
+fun isUriEmpty(uri: Uri?): Boolean {
+    return uri == null || uri == Uri.EMPTY || uri.toString().isBlank()
 }

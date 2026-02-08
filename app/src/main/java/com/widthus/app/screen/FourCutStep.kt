@@ -302,13 +302,14 @@ fun FourCutScreen(
                             coroutineScope.launch {
                                 // GraphicsLayer를 비트맵으로 변환 (비동기)
                                 val bitmap = graphicsLayer.toImageBitmap()
+
                                 // 갤러리 저장 함수 호출 (ImageBitmap -> AndroidBitmap 변환 필요)
-                                saveImageBitmapToGallery(context, bitmap)?.let {
-                                    onSaveComplete.invoke(it)
-                                    showToast = true
-                                } ?: run {
-                                    Toast.makeText(context, "저장 실패:", Toast.LENGTH_SHORT).show()
-                                }
+//                                saveImageBitmapToGallery(context, bitmap)?.let {
+//                                    onSaveComplete.invoke(it)
+//                                    showToast = true
+//                                } ?: run {
+//                                    Toast.makeText(context, "저장 실패:", Toast.LENGTH_SHORT).show()
+//                                }
                             }
                         },
                         modifier = Modifier

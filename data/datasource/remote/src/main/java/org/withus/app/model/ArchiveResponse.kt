@@ -8,12 +8,7 @@ data class ArchiveResponse(
 
 data class ArchiveDateGroup(
     val date: String, // "2026-01-28"
-    val imageInfoList: List<UserAnswerInfo> // 기존 사용하던 모델 재사용
-)
-
-data class ArchiveDetailResponse(
-    val date: String,
-    val archiveInfoList: List<ArchiveDateGroup> // 기존 정의한 ArchiveDateGroup 재사용
+    val imageInfoList: List<UserAnswerInfo>,
 )
 
 // 2. 캘린더 월별 조회 모델
@@ -48,4 +43,21 @@ data class QuestionDetailResponse(
     val questionContent: String,
     val myInfo: UserAnswerInfo?, // 사진 삭제 시 null 가능성 대비
     val partnerInfo: UserAnswerInfo?
+)
+
+
+// 상세 페이지용 아이템 모델 (명세서의 "selected" 반영)
+data class ArchiveDetailItem(
+    val archiveType: String, // "QUESTION" 또는 "CUSTOM"
+    val id: Long,            // 식별용 ID
+    val selected: Boolean,   // 서버가 true/false로 내려줌
+    val questionNumber: Int?,
+    val questionContent: String?,
+    val myInfo: UserAnswerInfo?,      // 내가 답변 안했으면 null
+    val partnerInfo: UserAnswerInfo?  // 상대가 답변 안했으면 null
+)
+
+data class ArchiveDetailResponse(
+    val date: String,
+    val archiveInfoList: List<ArchiveDetailItem>
 )

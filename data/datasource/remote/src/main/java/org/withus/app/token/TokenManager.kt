@@ -23,14 +23,22 @@ class TokenManager @Inject constructor(
 
     companion object {
         private val ACCESS_TOKEN = stringPreferencesKey("access_token")
+        private val FCM_TOKEN = stringPreferencesKey("fcm_token")
     }
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token.asStateFlow()
 
+    private val _fcmToken = MutableStateFlow<String?>(null)
+    val fcmToken: StateFlow<String?> = _fcmToken.asStateFlow()
+
     init {
         CoroutineScope(Dispatchers.IO).launch {
             dataStore.data.map { it[ACCESS_TOKEN] }.collect { _token.value = it }
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            dataStore.data.map { it[FCM_TOKEN] }.collect { _fcmToken.value = it }
         }
     }
 
@@ -39,5 +47,17 @@ class TokenManager @Inject constructor(
     suspend fun saveAccessToken(token: String) {
         dataStore.edit { it[ACCESS_TOKEN] = token }
     }
+
+
+    suspend fun deleteAccessToken() {
+        dataStore.edit { it.remove(ACCESS_TOKEN) }
+        _token.value = null // StateFlow도 즉시 업데이트
+    }
+
+    suspend fun saveFcmToken(token: String) {
+        dataStore.edit { it[FCM_TOKEN] = token }
+    }
+
+    fun getFcmTokenSync(): String? = _fcmToken.value
 }
 

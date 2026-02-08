@@ -50,7 +50,7 @@ class DailyRepository @Inject constructor(
 
     // 오늘의 일상 데이터 조회
     suspend fun getTodayDaily(coupleKeywordId: Long): Result<CoupleQuestionData> = runCatching {
-        val resp = api.getTodayDaily(coupleKeywordId)
+        val resp = api.getTodayKeywords(coupleKeywordId)
         resp.body()?.data ?: throw Exception("데이터 로드 실패")
     }
 

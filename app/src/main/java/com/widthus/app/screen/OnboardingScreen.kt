@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -25,6 +27,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +45,7 @@ import coil.compose.AsyncImage
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
 import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(
@@ -59,75 +63,13 @@ fun OnboardingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            // 1. 전체 내용을 담은 페이저 (이미지 + 텍스트)
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .weight(1f) // 페이저가 버튼 위쪽의 모든 공간을 차지하게 함
-                    .fillMaxWidth()
-            ) { pageIndex ->
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // 상단 여백 (이미지 위치 조정)
-                    Spacer(modifier = Modifier.height(155.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
-                    // 이미지 영역 (이제 페이저 안에 있음)
-                    Box(
-                        modifier = Modifier
-                            .size(200.dp)
-                            .background(Color(0xFFE6E6E6)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // 각 페이지별 이미지를 가져와서 표시 (예: pages[pageIndex].image)
-                        // 여기서는 일단 기존 로직 유지
-                        if (viewModel.profileImageUri != null) {
-                            AsyncImage(
-                                model = viewModel.profileImageUri,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop,
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.Person,
-                                contentDescription = null,
-                                modifier = Modifier.size(80.dp),
-                                tint = Color.LightGray
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // 텍스트 영역
-                    Text(
-                        text = pages[pageIndex].title,
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 32.sp,
-                        color = Color.Black,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = pages[pageIndex].description,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 20.sp,
-                        color = Color(0xFF212121),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-
-            // 2. 인디케이터 (페이저 바깥 하단 고정)
+            // 1. 인디케이터 (상단 배치)
             Row(
                 Modifier
                     .height(30.dp)
@@ -137,47 +79,120 @@ fun OnboardingScreen(
             ) {
                 repeat(pages.size) { iteration ->
                     val isSelected = pagerState.currentPage == iteration
-                    val width = if (isSelected) 32.dp else 10.dp
-                    val color = if (isSelected) Color.Black else Color.LightGray
-
                     Box(
                         modifier = Modifier
                             .padding(4.dp)
-                            .size(width = width, height = 8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(color)
+                            .size(width = if (isSelected) 24.dp else 8.dp, height = 6.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) Color.Black else Color(0xFFE0E0E0))
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 2. 메인 페이저
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            ) { pageIndex ->
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // 카드 영역 (이미지의 회색 라운드 박스)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(0.9f)
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(Color(0xFFF7F7F7)), // 아주 연한 회색 배경
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            // 상단 캡슐 태그
+                            Surface(
+                                shape =  RoundedCornerShape(50),
+                                color = Color(0xFF333333),
+                                modifier = Modifier.padding(bottom = 24.dp)
+                            ) {
+                                Text(
+                                    text = pages[pageIndex].tag, // "오늘의 질문" 등
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(20.dp))
+                            // 제목
+                            Text(
+                                text = pages[pageIndex].title,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 34.sp,
+                                color = Color.Black
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Image(
+                                painter = painterResource(id = pages[pageIndex].imageRes),
+                                contentDescription = null,
+                                modifier = Modifier
+//                                    .fillMaxWidth(0.7f)
+//                                    .aspectRatio(0.8f) // 이미지 비율에 맞게 조정
+                                    .clip(RoundedCornerShape(16.dp)),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // 상세 설명
+                    Text(
+                        text = pages[pageIndex].content,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp,
+                        color = Color(0xFF666666)
+                    )
+                }
+            }
 
             // 3. 하단 버튼
             val isLastPage = pagerState.currentPage == pages.size - 1
 
-            if (isLastPage) {
-                Button(
-                    onClick = onFinish,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
-                ) {
-                    Text(
-                        text = "시작하기",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
+            Button(
+                onClick = {
+                    if (isLastPage) onFinish()
+                    else {
+                        coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A1A))
+            ) {
+                Text(
+                    text = if (isLastPage) "시작하기" else "다음",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
 
-            Spacer(modifier = Modifier.height(46.dp))
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
-
 @Composable
 fun LoginScreen(
     onKakaoLogin: () -> Unit,
@@ -206,6 +221,16 @@ fun LoginScreen(
 
             // 중간 빈 공간을 밀어내기 위해 weight 사용
             Spacer(modifier = Modifier.weight(1f))
+
+            Image(
+                painter = painterResource(R.drawable.image_login_background),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth(0.7f)
+                    .aspectRatio(0.8f) // 이미지 비율에 맞게 조정
+                    .clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Fit
+            )
 
             // 2. 슬로건 영역 (왼쪽 정렬 느낌을 위해 Box나 Column 사용)
             Column(
