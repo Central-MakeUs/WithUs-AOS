@@ -59,7 +59,7 @@ class MemoryViewModel @Inject constructor(
         }
     }
 
-    fun uploadCustomMemory(bitmap: Bitmap, targetWeekEndDate: String? = null) {
+    fun uploadCustomMemory(bitmap: Bitmap, targetWeekEndDate: String? = null, title: String? = null) {
         viewModelScope.launch {
             _uploadState.value = UploadState.Loading
 //            val targetWeekEndDate = LocalDate.now()
@@ -74,7 +74,7 @@ class MemoryViewModel @Inject constructor(
                 // 2. 추억 생성 API 호출
                 try {
                     val result = if (targetWeekEndDate == null) apiService.createMemoryNoDate(
-                        CreateMemoryRequest(imageKey)
+                        CreateMemoryRequest(imageKey, title = title)
                     )
                     else apiService.createMemoryWithDate(
                         targetWeekEndDate,

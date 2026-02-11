@@ -43,7 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
-import com.widthus.app.viewmodel.MainViewModel
+import com.widthus.app.model.LocalPartnerNickname
+import com.widthus.app.model.LocalUserNickname
 import com.widthus.app.viewmodel.MemoryViewModel
 import com.widthus.app.viewmodel.UploadState
 import kotlinx.coroutines.Dispatchers
@@ -92,24 +93,6 @@ suspend fun fetchAllPhotos(context: Context): List<GalleryImage> = withContext(D
     }
     photoList
 }
-
-suspend fun fetchGalleryImages(context: Context): List<GalleryImage> = withContext(Dispatchers.IO) {
-    val images = mutableListOf<GalleryImage>()
-    val projection = arrayOf(MediaStore.Images.Media._ID)
-    val sortOrder = "${MediaStore.Images.Media.DATE_TAKEN} DESC"
-    val queryUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-
-    context.contentResolver.query(queryUri, projection, null, null, sortOrder)?.use { cursor ->
-        val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-        while (cursor.moveToNext()) {
-            val id = cursor.getLong(idColumn)
-            val contentUri = ContentUris.withAppendedId(queryUri, id)
-            images.add(GalleryImage(id, contentUri))
-        }
-    }
-    images
-}
-
 
 enum class ManualCreateStep(val title: String, val progress: String) {
     PHOTO("12장의 사진을 선택해주세요", "1/3"),
@@ -181,6 +164,7 @@ fun ManualCreateScreen(
                 Toast.makeText(context, "추억이 서버에 저장되었습니다.", Toast.LENGTH_SHORT).show()
                 memoryViewModel.resetUploadState() // 상태 초기화
                 onClose() // 화면 닫기
+                memoryViewModel.fetchMemories()
             }
             is UploadState.Error -> {
                 Toast.makeText(context, (uploadState as UploadState.Error).message, Toast.LENGTH_SHORT).show()
@@ -290,8 +274,8 @@ fun ManualCreateScreen(
                             backgroundColor = frameColor,
                             contentColor = if (frameColor == Color.Black) Color.White else Color.Black,
                             title = titleText,
-                            myProfileUrl = "", // todo - 프로필
-                            partnerProfileUrl = "",
+                            myProfileUrl = LocalUserNickname.current.serverProfileUrl,
+                            partnerProfileUrl = LocalPartnerNickname.current.serverProfileUrl,
                             onSlotClick = {},
                             currentStep = currentStep
                         )
@@ -328,7 +312,7 @@ fun ManualCreateScreen(
                     scope.launch {
                         val bitmap = graphicsLayer.toImageBitmap()
 
-                        memoryViewModel.uploadCustomMemory(bitmap.asAndroidBitmap(),)
+                        memoryViewModel.uploadCustomMemory(bitmap.asAndroidBitmap(), title = titleText)
                         saveImageBitmapToGallery(context, bitmap)?.let {
                             onSaveComplete(it)
                             onClose()
@@ -554,212 +538,6 @@ fun ProfileCircle(
     }
 }
 
-// 색상 선택 버튼 (FourCutScreen의 FilterButton 등 재활용 가능)
-@Composable
-fun ColorSelectionButton(color: Color, isSelected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(60.dp)
-            .border(
-                width = if (isSelected) 3.dp else 1.dp,
-                color = if (isSelected) Color(0xFFFF5E00) else Color.Gray, // 선택 시 주황색 테두리
-                shape = CircleShape
-            )
-            .padding(4.dp) // 테두리 간격
-            .clip(CircleShape)
-            .background(color)
-            .clickable { onClick() }
-    ) {
-        // 검은색 버튼일 때 내부가 잘 안보이므로 체크 아이콘 추가 가능
-        if (isSelected) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = null,
-                tint = if (color == Color.White) Color.Black else Color.White,
-                modifier = Modifier.align(Alignment.Center)
-            )
-        }
-    }
-}
-
-// 헤더 (재사용성을 위해 수정)
-@Composable
-fun FourCutHeader(
-    currentStepTitle: String,
-    progress: String,
-    onBackClick: () -> Unit,
-    onNextClick: () -> Unit,
-    isNextVisible: Boolean
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .padding(horizontal = 16.dp)
-    ) {
-        IconButton(onClick = onBackClick, modifier = Modifier.align(Alignment.CenterStart)) {
-            Icon(Icons.Default.Close, contentDescription = "닫기")
-        }
-
-        Column(
-            modifier = Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(progress, fontSize = 12.sp, color = Color.Gray)
-            Text(currentStepTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
-
-        if (isNextVisible) {
-            TextButton(onClick = onNextClick, modifier = Modifier.align(Alignment.CenterEnd)) {
-                Text("다음", fontWeight = FontWeight.Bold, color = Color.Black)
-            }
-        }
-    }
-}
-
-
-// [2] 하단 선택 바 (스크린샷 하단부)
-@Composable
-fun SelectedPhotoBottomBar(
-    selectedImages: List<Uri>,
-    onRemove: (Uri) -> Unit,
-    onNextClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .shadow(10.dp) // 상단 그림자
-    ) {
-        // 안내 문구 & 다음 버튼
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "12장의 사진을 선택해주세요.",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Button(
-                onClick = onNextClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedImages.size > 0) Color(0xFFFF5E00) else Color.Gray
-                ),
-                shape = RoundedCornerShape(20.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = if (selectedImages.size > 0) "다음(${selectedImages.size})" else "다음",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        // 선택된 사진 썸네일 리스트
-        if (selectedImages.isNotEmpty()) {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp) // 높이 고정
-                    .padding(bottom = 12.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(selectedImages) { uri ->
-                    Box(
-                        modifier = Modifier
-                            .size(60.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    ) {
-                        AsyncImage(
-                            model = uri,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-
-                        // 삭제 버튼 (X)
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(4.dp)
-                                .size(16.dp)
-                                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                .clickable { onRemove(uri) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "삭제",
-                                tint = Color.White,
-                                modifier = Modifier.size(10.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun GalleryGrid(
-    allImages: List<GalleryImage>,
-    selectedImages: List<Uri>,
-    onImageClick: (Uri) -> Unit
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(1.dp),
-        verticalArrangement = Arrangement.spacedBy(1.dp),
-        horizontalArrangement = Arrangement.spacedBy(1.dp)
-    ) {
-        items(allImages) { item ->
-            val isSelected = selectedImages.contains(item.uri)
-            val index = selectedImages.indexOf(item.uri) + 1
-
-            Box(modifier = Modifier
-                .aspectRatio(1f)
-                .clickable { onImageClick(item.uri) }) {
-                AsyncImage(
-                    model = item.uri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                if (isSelected) {
-                    Box(Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(0.4f)))
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(24.dp)
-                            .background(Color(0xFFFF5E00), CircleShape)
-                            .border(1.dp, Color.White, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "$index",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 fun BottomEditController(
     currentStep: ManualCreateStep,
@@ -871,6 +649,7 @@ fun BottomEditController(
             if (showAddSheet) {
                 AddTextBottomSheet(
                     title = "원하는 문구를 작성해보세요.",
+                    text = titleText,
                     placeholderText = titleText, // 생성한 날짜 전달
                     onDismissRequest = { showAddSheet = false },
                     onKeywordAdded = { newKeyword ->
@@ -963,14 +742,4 @@ fun SelectedPhotosBar(
             }
         }
     }
-}
-
-fun getTargetWeekEndDate(): String {
-    val today = LocalDate.now()
-
-    // 오늘 기준 가장 가까운 토요일(오늘이 토요일이면 오늘 날짜 반환)을 구합니다.
-    val nextSaturday = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
-
-    // ISO-8601 형식 (YYYY-MM-DD)으로 포맷팅
-    return nextSaturday.format(DateTimeFormatter.ISO_LOCAL_DATE)
 }

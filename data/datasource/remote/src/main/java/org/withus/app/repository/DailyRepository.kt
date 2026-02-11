@@ -25,8 +25,7 @@ class DailyRepository @Inject constructor(
 
     // [통합 프로세스] 1.S3업로드 -> 2.ImageKey획득 -> 3.서버에 등록
     suspend fun uploadDailyPhoto(coupleKeywordId: Long, imageUri: Uri): Result<Unit> = runCatching {
-        // 1) Presigned URL 요청 (키워드/일상용 카테고리로 요청, 서버 명세에 따라 "DAILY" 등으로 변경 가능)
-        val presignedResp = api.getPresignedUrl(PresignedUrlRequest("DAILY"))
+        val presignedResp = api.getPresignedUrl(PresignedUrlRequest("ARCHIVE"))
         val presignedData = presignedResp.body()?.data ?: throw Exception("Presigned URL 발급 실패")
 
         // 2) S3 업로드

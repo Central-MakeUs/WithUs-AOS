@@ -2,6 +2,7 @@ package org.withus.app.remote
 
 import okhttp3.RequestBody
 import org.withus.app.model.ArchiveDetailResponse
+import org.withus.app.model.ArchiveListResponse
 import org.withus.app.model.ArchiveResponse
 import org.withus.app.model.CalendarResponse
 import org.withus.app.model.CommonResponse
@@ -14,6 +15,7 @@ import org.withus.app.model.InvitationCodeData
 import org.withus.app.model.JoinCoupleData
 import org.withus.app.model.JoinCouplePreviewData
 import org.withus.app.model.JoinCoupleRequest
+import org.withus.app.model.KeywordEditResponse
 import org.withus.app.model.KeywordListResponse
 import org.withus.app.model.KeywordUpdateRequest
 import org.withus.app.model.KeywordsData
@@ -59,6 +61,13 @@ interface ApiService {
         @Body loginRequest: LoginRequest
     ): Response<CommonResponse<LoginResponse>>
 
+
+    @POST("/api/auth/temp/token/{id}")
+    suspend fun loginTemp(
+        @Path("id") id: String,
+        @Query("fcmToken") fcmToken: String
+    ): Response<CommonResponse<LoginResponse>>
+
     @GET("/api/me/user/profile")
     suspend fun getUserProfile(): Response<CommonResponse<ProfileResponse>>
 
@@ -72,7 +81,8 @@ interface ApiService {
         @Body profileRequest: ProfileUpdateRequest
     ): Response<CommonResponse<ProfileResponse>>
 
-    @POST("/api/me/status") suspend fun getUserStatus(): Response<CommonResponse<StatusData>>
+    @POST("/api/me/status")
+    suspend fun getUserStatus(): Response<CommonResponse<StatusData>>
 
     @POST("/api/me/couple/join")
     suspend fun joinCouple(
@@ -85,7 +95,8 @@ interface ApiService {
         @Body request: JoinCoupleRequest
     ): Response<CommonResponse<JoinCouplePreviewData>>
 
-    @POST("/api/me/user/invitation-codes") suspend fun createInvitationCode(): Response<CommonResponse<InvitationCodeData>>
+    @POST("/api/me/user/invitation-codes")
+    suspend fun createInvitationCode(): Response<CommonResponse<InvitationCodeData>>
 
     /**
      * 내 커플 키워드 목록 조회
@@ -98,6 +109,10 @@ interface ApiService {
      */
     @GET("/api/keywords")
     suspend fun getAllKeywords(): Response<CommonResponse<KeywordsData>>
+
+    // [추가] 수정용 전체 키워드 가져오기
+    @GET("/api/me/couple/keywords/edit")
+    suspend fun getEditableKeywords(): Response<CommonResponse<KeywordEditResponse>>
 
     // 1. 디폴트 키워드 목록 가져오기
     @GET("/api/keywords/default")
@@ -114,7 +129,7 @@ interface ApiService {
         @Path("userId") userId: Long
     ): Response<CommonResponse<Unit>>
 
-    @GET("/api/me/couple/questions/image")
+    @GET("/api/me/couple/question/today ")
     suspend fun getTodayQuestion(): Response<CommonResponse<CoupleQuestionData>>
 
     // 2. 오늘의 질문 사진 업로드
@@ -146,7 +161,7 @@ interface ApiService {
     suspend fun getArchives(
         @Query("size") size: Int = 20,
         @Query("cursor") cursor: String? = null
-    ): Response<CommonResponse<ArchiveResponse>>
+    ): Response<CommonResponse<ArchiveListResponse>>
 
     @GET("/api/me/couple/archives/date")
     suspend fun getArchiveDetailByDate(
@@ -161,7 +176,6 @@ interface ApiService {
         @Query("year") year: Int,
         @Query("month") month: Int
     ): Response<CommonResponse<CalendarResponse>>
-
 
     @GET("/api/me/couple/archives/questions")
     suspend fun getQuestionArchives(

@@ -3,20 +3,18 @@ package com.widthus.app.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
-import com.widthus.app.model.MemoryItem
-import com.widthus.app.model.ScheduleItem
 import com.widthus.app.model.OnboardingPage
-import com.widthus.app.model.ProfileLoadResult
+import com.widthus.app.screen.BottomNavItem
 import com.widthus.app.screen.Screen
 import com.widthus.app.utils.PreferenceManager
 import com.withus.app.R
@@ -29,34 +27,32 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.withus.app.debug
 import org.withus.app.model.ApiException
 import org.withus.app.model.ArchiveDateGroup
 import org.withus.app.model.ArchiveQuestionItem
+import org.withus.app.model.ArchiveUserAnswerInfo
 import org.withus.app.model.CalendarDayInfo
+import org.withus.app.model.CoupleKeyword
 import org.withus.app.model.CoupleQuestionData
 import org.withus.app.model.JoinCouplePreviewData
 import org.withus.app.model.JoinCoupleRequest
+import org.withus.app.model.KeywordEditItem
 import org.withus.app.model.KeywordInfo
 import org.withus.app.model.KeywordUpdateRequest
 import org.withus.app.model.ProfileSettingStatus
 import org.withus.app.model.QuestionDetailResponse
-import org.withus.app.model.UserAnswerInfo
 import org.withus.app.token.TokenManager
-import org.withus.app.model.request.LoginRequest
-import org.withus.app.model.request.PresignedUrlRequest
-import org.withus.app.model.request.ProfileUpdateRequest
 import org.withus.app.remote.ApiService
+import org.withus.app.remote.NetworkResult
 import org.withus.app.repository.ArchiveRepository
-import org.withus.app.repository.CoupleRepository
 import org.withus.app.repository.DailyRepository
+import org.withus.app.repository.KeywordRepository
 import org.withus.app.repository.ProfileRepository
-import org.withus.app.repository.TestTest
 import org.withus.app.repository.UserRepository
 import java.io.IOException
 import java.time.LocalDate
+import java.time.YearMonth
 import javax.inject.Inject
 
 @HiltViewModel
@@ -68,6 +64,7 @@ class MainViewModel @Inject constructor(
     private val tokenManager: TokenManager,
     private val preferenceManager: PreferenceManager,
     private val archiveRepository: ArchiveRepository,
+    private val keywordRepository: KeywordRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -75,16 +72,27 @@ class MainViewModel @Inject constructor(
     private val _myCode = MutableStateFlow<String?>(null)
     val myCode: StateFlow<String?> = _myCode.asStateFlow()
 
+    private val _selectedMainTab = MutableStateFlow("오늘의 질문")
+    val selectedMainTab: StateFlow<String> = _selectedMainTab
+
+    fun updateMainTab(tab: String) {
+        _selectedMainTab.value = tab
+    }
+
+
+    private val _currentBottomRoute = MutableStateFlow(BottomNavItem.Home.route)
+    val currentBottomRoute: StateFlow<String> = _currentBottomRoute.asStateFlow()
+
+    fun updateRoute(route: String) {
+        _currentBottomRoute.value = route
+    }
+
+    var joinPreviewData by mutableStateOf<JoinCouplePreviewData?>(null)
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     private val _error = MutableSharedFlow<String>()
     val error: SharedFlow<String> = _error.asSharedFlow()
-
-    var isOnboardingComplete by mutableStateOf(false)
-        private set
-    // 1단계: 닉네임
-
 
     // 탈퇴 성공 여부를 알리는 이벤트 (UI에서 관찰하여 로그아웃 처리)
     var isDeleteAccountSuccess by mutableStateOf(false)
@@ -107,28 +115,32 @@ class MainViewModel @Inject constructor(
     private val _memorySets = mutableStateListOf<CoupleQuestionData>()
     val memorySets: List<CoupleQuestionData> = _memorySets
 
-    // 가입 날짜 (가입일로부터 오늘까지 계산하거나 고정값 사용)
+    // 가입 날짜 todo
     val joinDate = "2024년 10월 6일"
 
     var isConnect = false
 
+    private val _displayedMonths = mutableStateListOf<YearMonth>() // 여기서 바로 초기화!
+    val displayedMonths: List<YearMonth> = _displayedMonths
+
+    private val _calendarDataMap = mutableStateMapOf<YearMonth, List<CalendarDayInfo>>()
+    val calendarDataMap: Map<YearMonth, List<CalendarDayInfo>> = _calendarDataMap
 
     init {
-        // 앱 실행 시 저장된 값들을 로드
-        viewModelScope.launch {
-            preferenceManager.isOnboardingComplete.collect { savedStatus ->
-                isOnboardingComplete = savedStatus
-            }
+        val current = YearMonth.now()
+        for (i in 0 until 12) {
+            _displayedMonths.add(current.minusMonths(i.toLong()))
         }
-
-        loadDummyMemories()
     }
 
 
     // 3단계: 첫 만남 기념일
     var anniversaryDate by mutableStateOf("")
         private set
+
     fun updateAnniversaryDate(input: String) {
+        val current = YearMonth.now()
+
         if (input.length <= 8 && input.all { it.isDigit() }) {
             anniversaryDate = input
         }
@@ -149,22 +161,6 @@ class MainViewModel @Inject constructor(
 
     var selectedImageUri by mutableStateOf<Uri?>(null)
         private set
-
-    // 1. 일정 더미 데이터
-    val dummySchedules = listOf(
-        ScheduleItem(1, "쏘피와 점심 데이트", "12:30"),
-        ScheduleItem(2, "영화 '파묘' 예매", "19:00"),
-        ScheduleItem(3, "기념일 케이크 픽업", "18:00")
-    )
-
-    // 2. 사진 더미 데이터
-    val dummyMemories = listOf(
-        // 지금은 임시로 안드로이드 기본 아이콘을 넣었습니다.
-        // 실제 사용시: MemoryItem(1, R.drawable.image_01),
-        MemoryItem(1, R.drawable.dummy_couple_1),
-        MemoryItem(2, R.drawable.dummy_couple_2),
-        MemoryItem(3, R.drawable.dummy_couple_3),
-    )
 
     val onboardingPages = listOf(
         OnboardingPage("오늘의 질문", "매일 전달되는 질문으로\n서로에 대해 더 알아가요.", "매일 제시되는 질문에 사진으로 답하면, \n" +
@@ -217,68 +213,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun loadDummyMemories() {
-        val dummyData = listOf(
-            CoupleQuestionData(
-                coupleQuestionId = 505,
-                question = "상대가 가장 사랑스러워 보였던 순간은 언제인가요?",
-                myInfo = UserAnswerInfo(
-                    userId = 123,
-                    name = "김철수",
-                    profileThumbnailImageUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200", // 테스트 이미지
-                    questionImageUrl = "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?w=800",
-                    answeredAt = "20:30"
-                ),
-                partnerInfo = UserAnswerInfo(
-                    userId = 456,
-                    name = "쏘피",
-                    profileThumbnailImageUrl = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200",
-                    questionImageUrl = "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800",
-                    answeredAt = "21:15"
-                )
-            ),
-            CoupleQuestionData(
-                coupleQuestionId = 504,
-                question = "함께 간 여행지에서 찍은 사진은?\n혹은 가고 싶은 여행지?",
-                myInfo = UserAnswerInfo(
-                    userId = 123,
-                    name = "김철수",
-                    profileThumbnailImageUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200",
-                    questionImageUrl = "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800",
-                    answeredAt = "PM 12:30"
-                ),
-                partnerInfo = UserAnswerInfo(
-                    userId = 456,
-                    name = "쏘피",
-                    profileThumbnailImageUrl = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200",
-                    questionImageUrl = "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?w=800",
-                    answeredAt = "PM 01:10"
-                )
-            ),
-            CoupleQuestionData(
-                coupleQuestionId = 503,
-                question = "우리가 처음 만난 날, 상대방의 첫인상은?",
-                myInfo = UserAnswerInfo(
-                    userId = 123,
-                    name = "김철수",
-                    profileThumbnailImageUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200",
-                    questionImageUrl = "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800",
-                    answeredAt = "어제"
-                ),
-                partnerInfo = UserAnswerInfo(
-                    userId = 456,
-                    name = "쏘피",
-                    profileThumbnailImageUrl = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200",
-                    questionImageUrl = "https://images.unsplash.com/photo-1522071823991-b1ae5e3a7c8e?w=800",
-                    answeredAt = "어제"
-                )
-            )
-        )
-
-        _memorySets.clear()
-        _memorySets.addAll(dummyData)
-    }
-
     fun isValidDate(dateStr: String): Boolean {
         if (dateStr.length != 8) return false
         return try {
@@ -298,22 +232,29 @@ class MainViewModel @Inject constructor(
     suspend fun navigateToNextScreenBasedOnStatus(
         navController: NavHostController
     ) {
-        when (checkUserStatus()) {
-            ProfileSettingStatus.NEED_USER_INITIAL_SETUP -> {
-                navController.navigate(Screen.Onboarding.route)
+        try {
+            when (checkUserStatus()) {
+                ProfileSettingStatus.NEED_USER_INITIAL_SETUP -> {
+                    navController.navigate(Screen.StepInput.route)
+                }
+                ProfileSettingStatus.NEED_COUPLE_CONNECT,
+                ProfileSettingStatus.NEED_COUPLE_INITIAL_SETUP -> {
+                    // 둘 다 같은 화면으로 이동하므로 묶음 처리
+                    navController.navigate(Screen.OnboardingConnect.route)
+                }
+                ProfileSettingStatus.COMPLETED -> {
+                    isConnect = true
+                    navController.navigate(Screen.Home.route)
+                }
+            }.also {
+                debug("checkUserStatus : $it!")
             }
-            ProfileSettingStatus.NEED_COUPLE_CONNECT,
-            ProfileSettingStatus.NEED_COUPLE_INITIAL_SETUP -> {
-                // 둘 다 같은 화면으로 이동하므로 묶음 처리
-                navController.navigate(Screen.OnboardingConnect.route)
-            }
-            ProfileSettingStatus.COMPLETED -> {
-                isConnect = true
-                navController.navigate(Screen.Home.route)
-            }
+        } catch (
+            e: Exception
+        ) {
+            Toast.makeText(context, "로그인 실패", Toast.LENGTH_SHORT).show()
         }
     }
-
     suspend fun joinCouple(inviteCode: String): Result<Long> = runCatching {
         val resp = apiService.joinCouple(JoinCoupleRequest(inviteCode))
         if (!resp.isSuccessful) throw ApiException(resp.code(), resp.errorBody()?.string().orEmpty())
@@ -327,7 +268,7 @@ class MainViewModel @Inject constructor(
         if (!resp.isSuccessful) throw ApiException(resp.code(), resp.errorBody()?.string().orEmpty())
         val body = resp.body() ?: throw ApiException(resp.code(), "Empty body")
         if (body.success != true || body.data == null) throw ApiException(resp.code(), body.error?.message ?: "Preview failed")
-        
+
         val data = body.data!!
         data
     }
@@ -364,15 +305,27 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // UI에 보여줄 전체 키워드 리스트 (디폴트 + 커스텀)
-    private val _displayKeywords = MutableStateFlow<List<KeywordInfo>>(emptyList())
-    val displayKeywords: StateFlow<List<KeywordInfo>> = _displayKeywords
+    private val _coupleKeyword = MutableStateFlow<List<CoupleKeyword>>(emptyList())
+    val coupleKeyword: StateFlow<List<CoupleKeyword>> = _coupleKeyword
 
-    var selectedKeywordId by mutableStateOf<Long?>(null)
-        private set
+    // 업데이트 함수
+    fun updateSelectedKeywords(newList: List<CoupleKeyword>) {
+        _coupleKeyword.value = newList
+    }
+    // UI에 보여줄 전체 키워드 리스트 (디폴트 + 커스텀)
+    private val _defaultKeywords = MutableStateFlow<List<KeywordInfo>>(emptyList())
+    val defaultKeywords: StateFlow<List<KeywordInfo>> = _defaultKeywords
+
+    private val _editKeywords = MutableStateFlow<List<KeywordEditItem>>(emptyList())
+    val editKeywords: StateFlow<List<KeywordEditItem>> = _editKeywords
+
+    private val _selectedKeywordId = MutableStateFlow<Long>(0L)
+    val selectedKeywordId: StateFlow<Long> = _selectedKeywordId
+
     fun selectKeyword(id: Long) {
-        selectedKeywordId = id
-        fetchDailyData(id) // 해당 ID의 일상 데이터를 가져오는 API 호출
+        _selectedKeywordId.value = id
+        val coupleKeywordId = getSelectedKeyId()?.coupleKeywordId
+        fetchDailyKeywordData(coupleKeywordId?.toLong() ?: 0L) // 해당 ID의 일상 데이터를 가져오는 API 호출
     }
 
     // 서버에서 받은 디폴트 키워드 매핑용 (Content -> ID)
@@ -393,7 +346,7 @@ class MainViewModel @Inject constructor(
 
                     // UI 리스트 업데이트 (정렬)
                     val sortedList = list.sortedBy { it.displayOrder }
-                    _displayKeywords.value = sortedList
+                    _defaultKeywords.value = sortedList
 
                     // [추가] 리스트가 비어있지 않다면 첫 번째 키워드를 자동으로 선택
                     if (sortedList.isNotEmpty() && selectedKeywordId == null) {
@@ -413,7 +366,7 @@ class MainViewModel @Inject constructor(
                 val defaultIds = mutableListOf<Long>()
                 val customList = mutableListOf<String>()
 
-                // 선택된 키워드가 디폴트인지 커스텀인지 분류
+                // 1. 분류 로직 (기존과 동일)
                 selectedKeywords.forEach { keyword ->
                     val id = defaultKeywordMap[keyword]
                     if (id != null) {
@@ -423,17 +376,9 @@ class MainViewModel @Inject constructor(
                     }
                 }
 
-                // 커스텀 키워드 리스트를 요청 포맷 문자열로 변환
-                // 예: "['산책', '맛집']" (작은따옴표 주의)
-                val customKeywordsString = if (customList.isEmpty()) {
-                    "[]"
-                } else {
-                    customList.joinToString(prefix = "['", separator = "', '", postfix = "']")
-                }
-
                 val request = KeywordUpdateRequest(
                     defaultKeywordIds = defaultIds,
-                    customKeywords = customKeywordsString
+                    customKeywords = customList
                 )
 
                 // API 호출
@@ -455,23 +400,29 @@ class MainViewModel @Inject constructor(
 
     // 직접 추가한 키워드를 UI 목록에 반영하는 함수
     fun addCustomKeywordToDisplay(newKeyword: String) {
-        val current = _displayKeywords.value.toMutableList()
+        val current = _defaultKeywords.value.toMutableList()
         // todo key word 추가
         current.add(KeywordInfo(
             keywordId = 0,
             content = newKeyword,
             displayOrder = 0,
         ))
-        _displayKeywords.value = current
+        _defaultKeywords.value = current
     }
 
     var showPokeSuccessDialog by mutableStateOf(false)
         private set
 
     fun pokePartner() {
+        val partnerId = questionData?.partnerInfo?.userId?.run {
+            this
+        } ?: keywordDailyData?.partnerInfo?.userId
+        debug("pokePartner ! : $partnerId")
+
         viewModelScope.launch {
             try {
-                val response = apiService.pokeUser(questionData!!.partnerInfo.userId)
+                val response = apiService.pokeUser(partnerId!!)
+                debug("response : $response")
                 if (response.isSuccessful && response.body()?.success == true) {
                     // 콕 찌르기 성공 시 다이얼로그 띄움
                     showPokeSuccessDialog = true
@@ -479,6 +430,7 @@ class MainViewModel @Inject constructor(
                     // 에러 처리 로직
                 }
             } catch (e: Exception) {
+                debug("error : $e")
                 // 네트워크 에러 처리
             }
         }
@@ -490,34 +442,6 @@ class MainViewModel @Inject constructor(
 
     var questionData by mutableStateOf<CoupleQuestionData?>(null)
         private set
-
-    fun fetchTodayQuestionTest() {
-        viewModelScope.launch {
-            // 실제 API 호출 대신 예시 데이터 주입
-            val mockData = CoupleQuestionData(
-                coupleQuestionId = 505L,
-                question = "상대가 가장 사랑스러워 보였던 순간은 언제인가요?",
-                date = LocalDate.now(),
-                myInfo = UserAnswerInfo(
-                    userId = 1L,
-                    name = "나",
-                    profileThumbnailImageUrl = TestTest.testImageUrl,
-//                    questionImageUrl = "https://img1.daumcdn.net/thumb/R1280x0.fjpg/?fname=http://t1.daumcdn.net/brunch/service/user/1dEO/image/CIieqAqy0KlR6UdFHxrc1NsGtVM.jpg",
-                    questionImageUrl = null,
-                    answeredAt = "20:30"
-                ),
-                partnerInfo = UserAnswerInfo(
-                    userId = 2L,
-                    name = "상대방",
-                    profileThumbnailImageUrl = TestTest.testImageUrl,
-                    questionImageUrl = "https://img1.daumcdn.net/thumb/R1280x0.fjpg/?fname=http://t1.daumcdn.net/brunch/service/user/1dEO/image/CIieqAqy0KlR6UdFHxrc1NsGtVM.jpg",
-                    answeredAt = "21:00"
-                )
-            )
-
-            questionData = mockData
-        }
-    }
 
     // 질문 조회 로직
     fun fetchTodayQuestion() {
@@ -534,6 +458,7 @@ class MainViewModel @Inject constructor(
 
     // 2. 사진 서버 업로드 함수
     fun uploadTodayQuestionImage(uri: Uri) {
+        debug("uploadTodayQuestionImage : uri ")
         val questionId = questionData?.coupleQuestionId ?: return
 
         viewModelScope.launch {
@@ -551,28 +476,41 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    var dailyData by mutableStateOf<CoupleQuestionData?>(null)
+    var keywordDailyData by mutableStateOf<CoupleQuestionData?>(null)
         private set
 
     // 키워드 탭 클릭 시 호출
-    fun fetchDailyData(coupleKeywordId: Long) {
+    fun fetchDailyKeywordData(coupleKeywordId: Long) {
         viewModelScope.launch {
             dailyRepository.getTodayDaily(coupleKeywordId)
-                .onSuccess { dailyData = it }
+                .onSuccess { keywordDailyData = it }
         }
     }
 
     // 오늘의 일상 사진 업로드
     fun uploadDailyImage(uri: Uri) {
-        val id = selectedKeywordId ?: return
-        viewModelScope.launch {
-            dailyRepository.uploadDailyPhoto(id, uri).onSuccess {
-                fetchDailyData(id) // 업로드 성공 후 화면 갱신을 위해 데이터 재조회
+        // 1. 현재 선택된 keywordId 가져오기
+        val currentSelectedId = selectedKeywordId.value
+        if (currentSelectedId == 0L) return
+
+        // 2. 전체 키워드 리스트에서 해당 keywordId와 일치하는 CoupleKeyword 객체 찾기
+        val targetKeyword = _coupleKeyword.value.find {
+            it.keywordId.toLong() == currentSelectedId
+        }
+
+        // 3. 일치하는 항목이 있고, coupleKeywordId가 유효한 경우에만 업로드 진행
+        targetKeyword?.coupleKeywordId?.let { coupleKeywordId ->
+            viewModelScope.launch {
+                // 주석: 서버 API가 요구하는 coupleKeywordId(Int)를 전달합니다.
+                dailyRepository.uploadDailyPhoto(coupleKeywordId.toLong(), uri).onSuccess {
+                    // 업로드 성공 후 화면 갱신을 위해 데이터 재조회 (기존 선택된 ID 유지)
+                    fetchDailyKeywordData(coupleKeywordId.toLong())
+                }
             }
         }
     }
 
-    var archiveItems by mutableStateOf<List<Pair<String, UserAnswerInfo>>>(emptyList())
+    var archiveItems by mutableStateOf<List<Pair<String, ArchiveUserAnswerInfo>>>(emptyList())
         private set
 
     private var nextCursor: String? = null
@@ -660,6 +598,30 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun fetchCalendar(yearMonth: YearMonth) {
+        // 이미 데이터가 있다면 다시 부르지 않음 (캐싱)
+        if (_calendarDataMap.containsKey(yearMonth)) return
+
+        viewModelScope.launch {
+            // API 호출 (기존 로직 활용)
+            archiveRepository.getCalendar(yearMonth.year, yearMonth.monthValue)
+                .onSuccess { data ->
+                    // 받아온 데이터를 Map에 저장
+                    _calendarDataMap[yearMonth] = data.days
+                }
+                .onFailure {
+                    // 에러 처리 (빈 리스트라도 넣어주어야 계속 로딩 안 함)
+                    _calendarDataMap[yearMonth] = emptyList()
+                }
+        }
+    }
+
+    fun loadMorePastMonths() {
+        val lastMonth = _displayedMonths.last()
+        for (i in 1..6) {
+            _displayedMonths.add(lastMonth.minusMonths(i.toLong()))
+        }
+    }
 
     // 질문 목록 데이터 상태
     var archiveQuestions by mutableStateOf<List<ArchiveQuestionItem>>(emptyList())
@@ -717,4 +679,52 @@ class MainViewModel @Inject constructor(
         )
     }
 
+    fun getCoupleKeyword() {
+        viewModelScope.launch {
+            when (val result = keywordRepository.getCoupleKeywords()) {
+                is NetworkResult.Success -> {
+                    val keywords = result.data ?: emptyList()
+                    _coupleKeyword.value = keywords
+
+                    // 1. 데이터가 존재하고, 아직 선택된 키워드가 없는 경우 (초기 진입 시)
+                    if (keywords.isNotEmpty() && selectedKeywordId.value == 0L) {
+                        val firstId = keywords[0].keywordId.toLong()
+                        selectKeyword(firstId)
+                    }
+                }
+
+                is NetworkResult.Error -> { /* 에러 처리 */
+                }
+
+                is NetworkResult.Exception -> { /* 예외 처리 */
+                }
+            }
+        }
+    }
+
+
+    fun loadEditableKeywords() {
+        viewModelScope.launch {
+            val response = apiService.getEditableKeywords()
+            if (response.isSuccessful) {
+                val allKeywords = response.body()?.data?.keywords ?: emptyList()
+
+                // 1. 화면에 보여줄 전체 리스트 업데이트
+                _editKeywords.value = allKeywords
+
+                // 2. 그 중 선택된(isSelected == true) 것들만 추출해서 선택 상태 초기화
+                val initialSelected = allKeywords
+                    .filter { it.isSelected }
+                    .map { it.content }
+                    .toSet()
+
+                // UI Layer에서 관찰 중인 selectedKeywords를 이 값으로 세팅하시면 됩니다.
+            }
+        }
+    }
+
+    private fun getSelectedKeyId(): CoupleKeyword? {
+        val currentId = selectedKeywordId.value
+        return _coupleKeyword.value.find { it.keywordId.toLong() == currentId }
+    }
 }

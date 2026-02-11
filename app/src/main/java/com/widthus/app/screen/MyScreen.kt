@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -37,6 +38,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.widthus.app.viewmodel.AuthViewModel
 import com.widthus.app.viewmodel.MainViewModel
+import androidx.core.net.toUri
+import coil.compose.AsyncImage
+import com.widthus.app.model.LocalPartnerNickname
+import com.widthus.app.viewmodel.UiState
+import org.withus.app.debug
 
 // --- 라우트 정의 ---
 sealed class MyRoute(val route: String) {
@@ -57,6 +63,8 @@ fun MyScreenEntry(
     viewModel: MainViewModel,
     authViewModel: AuthViewModel,
     onNavigateToEditKeyword: () -> Unit,
+    onLogoutSuccess: () -> Unit,
+    onWithdraw: () -> Unit,
     mediaManager: ImageMediaManager
 ) {
     val navController = rememberNavController()
@@ -65,7 +73,7 @@ fun MyScreenEntry(
         // 1. 마이 메인 화면
         composable(MyRoute.Main.route) {
             MyMainScreen(
-                nickName = authViewModel.currentUserInfo.nickname,
+                nickName = authViewModel.currentUserInfo.nickname.text,
                 onNavigateToAccount = { navController.navigate(MyRoute.Account.route) },
                 onNavigateToConnectInfo = { navController.navigate(MyRoute.PartnerInfo.route) },
                 mediaManager = mediaManager,
@@ -81,7 +89,8 @@ fun MyScreenEntry(
             AccountManagementScreen(
                 viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onNavigateToDelete = { navController.navigate(MyRoute.DeleteWarning.route) }
+                onNavigateToDelete = { navController.navigate(MyRoute.DeleteWarning.route) },
+                onLogoutSuccess = onLogoutSuccess
             )
         }
         // 3. 회원 탈퇴 (경고)
@@ -93,17 +102,11 @@ fun MyScreenEntry(
                     onNext = { viewModel.updateDeleteStep(2) },
                     onMoveDisconnect = {
                         navController.navigate(MyRoute.Disconnect.route)
-                    }
-                )
+                    })
             } else {
                 DeleteAccountReasonScreen(
-                    viewModel = viewModel,
-                    onBack = { viewModel.updateDeleteStep(1) }, // 이전 단계로
-                    onNavigateToLogin = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(MyRoute.Main.route) { inclusive = true }
-                        }
-                    }
+                    viewModel = viewModel, onBack = { viewModel.updateDeleteStep(1) }, // 이전 단계로
+                    onNavigateToLogin = onWithdraw
                 )
             }
         }
@@ -112,18 +115,15 @@ fun MyScreenEntry(
             LaunchedEffect(authViewModel.isDisconnectSuccess) {
                 if (authViewModel.isDisconnectSuccess) {
                     navController.navigate(Screen.OnboardingConnect.route) {
-                        popUpTo(MyRoute.Main.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                     authViewModel.resetDisconnectStatus()
                 }
             }
 
-            DisconnectScreen(
-                onBack = { navController.popBackStack() },
-                onConfirmDisconnect = {
-                    authViewModel.terminateCouple()
-                }
-            )
+            DisconnectScreen(onBack = { navController.popBackStack() }, onConfirmDisconnect = {
+                authViewModel.terminateCouple()
+            })
         }
 
 // 1. 내 프로필 편집
@@ -134,9 +134,8 @@ fun MyScreenEntry(
                 onBack = { navController.popBackStack() },
                 mediaManager = mediaManager,
                 onNavigateToDisconnect = {
-
-                }
-            )
+                    navController.navigate(MyRoute.Disconnect.route)
+                })
         }
 
 // 2. 커플 연결 정보 (파트너 정보)
@@ -148,26 +147,26 @@ fun MyScreenEntry(
                     onBack = { navController.popBackStack() },
                     mediaManager = mediaManager,
                     onNavigateToDisconnect = {
-                        navController.navigate(MyRoute.Disconnect.route )
-                    }
-                )
+                        navController.navigate(MyRoute.Disconnect.route)
+                    })
             } else {
                 OnboardingConnectScreen(
-                    nickname = authViewModel.currentUserInfo.nickname,
+                    nickname = authViewModel.currentUserInfo.nickname.text,
                     onInviteClick = { navController.navigate(Screen.Invite.route) },
                     onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
                     onCloseClick = { navController.navigate(Screen.ConnectionPending.route) },
                     topBar = {
                         CenterAlignedTopAppBar(
                             title = { Text("커플 연결 정보", fontWeight = FontWeight.Bold) },
-                            navigationIcon = { BackButton({
-                                navController.popBackStack()
-                            }) },
+                            navigationIcon = {
+                                BackButton({
+                                    navController.popBackStack()
+                                })
+                            },
                             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
                             actions = {
 
-                            }
-                        )
+                            })
                     },
                     title = "아직 연결된 상대방이 없어요!"
                 )
@@ -189,6 +188,15 @@ fun MyMainScreen(
     onNavigateToEditKeyword: () -> Unit,
     mediaManager: ImageMediaManager
 ) {
+
+    val context = LocalContext.current
+
+    val openUrl = { url: String ->
+        val intent =
+            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+        context.startActivity(intent)
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -224,8 +232,7 @@ fun MyMainScreen(
                 OutlinedButton(
                     onClick = {
                         onEditProfile()
-                    },
-                    shape = RoundedCornerShape(20.dp)
+                    }, shape = RoundedCornerShape(20.dp)
                 ) {
                     Text("프로필 편집", color = Color.Gray)
                 }
@@ -238,7 +245,7 @@ fun MyMainScreen(
         item {
             SectionHeader("설정")
             MyListItem("알림")
-            MyListItem("키워드 관리", onClick = onNavigateToEditKeyword)
+            MyListItem("일상 키워드 관리", onClick = onNavigateToEditKeyword)
             MyListItem("계정 관리", onClick = onNavigateToAccount)
             Divider(thickness = 8.dp, color = Color(0xFFF9F9F9))
         }
@@ -247,10 +254,20 @@ fun MyMainScreen(
         item {
             SectionHeader("정보")
             MyListItem("커플 연결 정보", onClick = onNavigateToConnectInfo)
-            MyListItem("카카오 채널 문의하기")
-            MyListItem("앱 리뷰 남기기")
-            MyListItem("이용 약관")
-            MyListItem("개인정보 처리방침")
+            MyListItem("카카오 채널 문의하기", onClick = {
+                openUrl("https://open.kakao.com/o/svs9Bjfi")
+            })
+            MyListItem("앱 리뷰 남기기", onClick = {
+                // 구글 플레이스토어 링크 (패키지명 기준)
+                openUrl("market://details?id=${context.packageName}")
+            })
+            MyListItem("이용 약관", onClick = {
+                openUrl("https://mesquite-castanet-719.notion.site/WITHUS-2e44b0073081804bb7b8dbc7e4899bc4?source=copy_link")
+            })
+
+            MyListItem("개인정보 처리방침", onClick = {
+                openUrl("https://mesquite-castanet-719.notion.site/WITHUS-2e44b00730818039a6d0cf0adf89168c?source=copy_link")
+            })
         }
     }
 }
@@ -262,17 +279,33 @@ fun MyMainScreen(
 @Composable
 fun AccountManagementScreen(
     viewModel: AuthViewModel,
-    onBack: () -> Unit, onNavigateToDelete: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToDelete: () -> Unit,
+    onLogoutSuccess: () -> Unit
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
-    if (showLogoutDialog) {
-        LogoutConfirmDialog(
-            onDismiss = { showLogoutDialog = false },
-            onLogout = {
-                viewModel.logout()
-                showLogoutDialog = false
+
+    val logoutState by viewModel.logoutState // ComposeState이므로 직접 읽기 가능
+
+    LaunchedEffect(logoutState) {
+        when (logoutState) {
+            is UiState.Success -> {
+                onLogoutSuccess() // 콜백 실행 (예: 로그인 화면으로 이동)
             }
-        )
+
+            is UiState.Error -> {
+                // Toast.makeText(context, (logoutState as UiState.Error).message, ...).show()
+            }
+
+            else -> {}
+        }
+    }
+
+    if (showLogoutDialog) {
+        LogoutConfirmDialog(onDismiss = { showLogoutDialog = false }, onLogout = {
+            viewModel.logout()
+            showLogoutDialog = false
+        })
     }
 
     Scaffold(
@@ -282,8 +315,7 @@ fun AccountManagementScreen(
                 navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
-        },
-        containerColor = Color.White
+        }, containerColor = Color.White
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             MyListItem("로그아웃", onClick = {
@@ -299,7 +331,9 @@ fun AccountManagementScreen(
 // =================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeleteAccountWarningScreen(viewModel: MainViewModel, onBack: () -> Unit, onNext: () -> Unit, onMoveDisconnect: () -> Unit) {
+fun DeleteAccountWarningScreen(
+    viewModel: MainViewModel, onBack: () -> Unit, onNext: () -> Unit, onMoveDisconnect: () -> Unit
+) {
     var isChecked by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
@@ -310,8 +344,7 @@ fun DeleteAccountWarningScreen(viewModel: MainViewModel, onBack: () -> Unit, onN
             confirmText = "해제하러 가기",
             onDismiss = {
                 showConfirmDialog = false
-            }
-        ) {
+            }) {
             onMoveDisconnect()
         }
     }
@@ -322,8 +355,7 @@ fun DeleteAccountWarningScreen(viewModel: MainViewModel, onBack: () -> Unit, onN
                 navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
-        },
-        containerColor = Color.White
+        }, containerColor = Color.White
     ) { padding ->
         Column(
             modifier = Modifier
@@ -365,8 +397,7 @@ fun DeleteAccountWarningScreen(viewModel: MainViewModel, onBack: () -> Unit, onN
                     .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
                     .clickable { isChecked = !isChecked }
                     .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = isChecked,
                     onCheckedChange = { isChecked = it },
@@ -403,9 +434,9 @@ fun DeleteAccountWarningScreen(viewModel: MainViewModel, onBack: () -> Unit, onN
                 Button(
                     onClick = {
                         if (viewModel.isConnect) {
-                            onNext()
-                        } else {
                             showConfirmDialog = true
+                        } else {
+                            onNext()
                         }
                     },
                     modifier = Modifier
@@ -429,13 +460,11 @@ fun DeleteAccountWarningScreen(viewModel: MainViewModel, onBack: () -> Unit, onN
 // =================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeleteAccountReasonScreen(viewModel: MainViewModel, onBack: () -> Unit, onNavigateToLogin: () -> Unit) {
+fun DeleteAccountReasonScreen(
+    viewModel: MainViewModel, onBack: () -> Unit, onNavigateToLogin: () -> Unit
+) {
     val reasons = listOf(
-        "앱을 자주 사용하지 않아요",
-        "사용 방법이 복잡하거나 불편했어요",
-        "연인과 헤어졌어요",
-        "제가 필요로 하는 기능이 부족했어요",
-        "기타"
+        "앱을 자주 사용하지 않아요", "사용 방법이 복잡하거나 불편했어요", "연인과 헤어졌어요", "제가 필요로 하는 기능이 부족했어요", "기타"
     )
     var selectedReason by remember { mutableStateOf("") }
 
@@ -452,8 +481,7 @@ fun DeleteAccountReasonScreen(viewModel: MainViewModel, onBack: () -> Unit, onNa
                 navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
-        },
-        containerColor = Color.White
+        }, containerColor = Color.White
     ) { padding ->
         Column(
             modifier = Modifier
@@ -480,8 +508,7 @@ fun DeleteAccountReasonScreen(viewModel: MainViewModel, onBack: () -> Unit, onNa
                             onClick = { selectedReason = reason },
                             role = Role.RadioButton
                         )
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(16.dp), verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
                         selected = (selectedReason == reason),
@@ -529,6 +556,7 @@ fun DeleteAccountReasonScreen(viewModel: MainViewModel, onBack: () -> Unit, onNa
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DisconnectScreen(onBack: () -> Unit, onConfirmDisconnect: () -> Unit) {
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -536,8 +564,7 @@ fun DisconnectScreen(onBack: () -> Unit, onConfirmDisconnect: () -> Unit) {
                 navigationIcon = { BackButton(onBack) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
-        },
-        containerColor = Color.White
+        }, containerColor = Color.White
     ) { padding ->
         Column(
             modifier = Modifier
@@ -546,21 +573,24 @@ fun DisconnectScreen(onBack: () -> Unit, onConfirmDisconnect: () -> Unit) {
                 .padding(16.dp)
         ) {
             Text(
-                "쏘피님과 연결을 해제할까요?",
+                "${LocalPartnerNickname.current.nickname.text}님과 연결을 해제할까요?",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 이미지 플레이스홀더
-            Box(
+            AsyncImage(
+                model = LocalPartnerNickname.current.serverProfileUrl,
+                contentDescription = "Profile Image",
                 modifier = Modifier
-                    .size(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFEEEEEE))
-                    .align(Alignment.CenterHorizontally)
+                    .size(200.dp) // 크기 설정
+                    .clip(CircleShape) // 원형으로 자르기
+                    .background(Color(0xFFF9F9F9)) // 로딩 전이나 이미지 없을 때 배경색
+                    .align(Alignment.CenterHorizontally),
+                contentScale = ContentScale.Crop // 원형에 꽉 차게 맞춤
             )
+
             Spacer(modifier = Modifier.height(32.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -624,8 +654,7 @@ fun MyListItem(title: String, onClick: () -> Unit = {}) {
             .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+        verticalAlignment = Alignment.CenterVertically) {
         Text(title, fontSize = 16.sp)
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
@@ -641,8 +670,7 @@ fun BackButton(onClick: () -> Unit) {
     IconButton(onClick = onClick) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack, // 또는 ArrowBackIosNew
-            contentDescription = "뒤로가기",
-            tint = Color.Black
+            contentDescription = "뒤로가기", tint = Color.Black
         )
     }
 }
@@ -675,12 +703,8 @@ fun CommonConfirmDialog(
                 // 1. 텍스트 영역 (상단 패딩 및 중앙 정렬)
                 Column(
                     modifier = Modifier.padding(
-                        top = 32.dp,
-                        bottom = 24.dp,
-                        start = 20.dp,
-                        end = 20.dp
-                    ),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        top = 32.dp, bottom = 24.dp, start = 20.dp, end = 20.dp
+                    ), horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = title,
@@ -705,11 +729,9 @@ fun CommonConfirmDialog(
                 TextButton(
                     onClick = {
                         onConfirm()
-                    },
-                    modifier = Modifier
+                    }, modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RectangleShape
+                        .height(56.dp), shape = RectangleShape
                 ) {
                     Text(
                         text = confirmText,
@@ -730,9 +752,7 @@ fun CommonConfirmDialog(
                     shape = RectangleShape
                 ) {
                     Text(
-                        text = dismissText,
-                        color = Color.Black,
-                        fontSize = 16.sp
+                        text = dismissText, color = Color.Black, fontSize = 16.sp
                     )
                 }
             }
@@ -762,15 +782,19 @@ fun LogoutConfirmDialog(onDismiss: () -> Unit, onLogout: () -> Unit) {
                     )
                 }
                 Divider(color = Color(0xFFEEEEEE))
-                TextButton(onClick = onLogout, modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)) {
+                TextButton(
+                    onClick = onLogout, modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
                     Text("로그아웃", color = Color.Red, fontWeight = FontWeight.Bold)
                 }
                 Divider(color = Color(0xFFEEEEEE))
-                TextButton(onClick = onDismiss, modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)) {
+                TextButton(
+                    onClick = onDismiss, modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
                     Text("취소", color = Color.Black)
                 }
             }
@@ -816,9 +840,12 @@ fun ProfileEditScreen(
     }
 
     val title = if (mode == EditMode.ME) "프로필 편집" else "커플 연결 정보"
-    val nicknameValue = if (mode == EditMode.ME) viewModel.currentUserInfo else viewModel.partnerUserInfo
-    val birthdayValue = if (mode == EditMode.ME) viewModel.birthdayValue else viewModel.partnerBirthdayValue
-    val profileUri = if (mode == EditMode.ME) viewModel.currentUserInfo.profileUrl else viewModel.partnerProfileUri
+    val nicknameValue =
+        if (mode == EditMode.ME) viewModel.currentUserInfo else viewModel.partnerUserInfo
+    val birthdayValue =
+        if (mode == EditMode.ME) viewModel.birthdayValue else viewModel.partnerBirthdayValue
+    val profileUri =
+        if (mode == EditMode.ME) viewModel.currentUserInfo.serverProfileUrl else viewModel.partnerUserInfo.serverProfileUrl
 
     Scaffold(
         topBar = {
@@ -835,10 +862,8 @@ fun ProfileEditScreen(
                             Text("저장", color = Color.Red, fontWeight = FontWeight.Bold)
                         }
                     }
-                }
-            )
-        },
-        containerColor = Color.White
+                })
+        }, containerColor = Color.White
     ) { padding ->
         Column(
             modifier = Modifier
@@ -849,15 +874,16 @@ fun ProfileEditScreen(
             Spacer(modifier = Modifier.height(30.dp))
 
             ProfileImagePicker(
-                uri = profileUri,
-                onImageClick = { if (mode == EditMode.ME) showSheet = true }
-            )
+                uri = profileUri?.toUri(),
+                onImageClick = { if (mode == EditMode.ME) showSheet = true })
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            Column(modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+            ) {
                 Text("닉네임", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -922,12 +948,20 @@ fun ProfileEditScreen(
             ImageBottomSheet(
                 showSheet = showSheet,
                 onDismiss = { showSheet = false },
-                onCameraClick = { mediaManager.launchCamera { viewModel.currentUserInfo.copy(
-                    profileUrl = it
-                ) } },
-                onGalleryClick = { mediaManager.launchGallery { viewModel.currentUserInfo.copy(
-                    profileUrl = it
-                ) } },
+                onCameraClick = {
+                    mediaManager.launchCamera {
+                        viewModel.currentUserInfo.copy(
+                            selectedLocalUri = it
+                        )
+                    }
+                },
+                onGalleryClick = {
+                    mediaManager.launchGallery {
+                        viewModel.currentUserInfo.copy(
+                            selectedLocalUri = it
+                        )
+                    }
+                },
             )
         }
     }

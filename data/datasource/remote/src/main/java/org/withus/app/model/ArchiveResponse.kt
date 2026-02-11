@@ -61,3 +61,21 @@ data class ArchiveDetailResponse(
     val date: String,
     val archiveInfoList: List<ArchiveDetailItem>
 )
+
+data class ArchiveListResponse(
+    val archiveList: List<ArchiveGroupItem>,
+    val hasNext: Boolean,
+    val nextCursor: String?
+)
+
+data class ArchiveGroupItem(
+    val date: String,
+    val imageInfoList: List<ArchiveUserAnswerInfo> // 여기에 실제 이미지 URL들이 들어있음
+)
+
+data class ArchiveUserAnswerInfo(
+    val archiveType: String,
+    val id: Long,
+    val myImageUrl: String?,      // 로그상의 키값
+    val partnerImageUrl: String?  // 로그상의 키값
+)

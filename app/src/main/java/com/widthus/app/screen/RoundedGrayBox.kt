@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
@@ -15,6 +16,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,12 +27,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
@@ -58,7 +59,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -66,7 +66,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.kakao.sdk.share.ShareClient
@@ -75,13 +74,10 @@ import com.kakao.sdk.template.model.Content
 import com.kakao.sdk.template.model.FeedTemplate
 import com.kakao.sdk.template.model.Link
 import com.widthus.app.model.CalendarDay
-import com.widthus.app.model.LocalUserNickname
 import com.widthus.app.model.MemoryItem
 import com.widthus.app.model.ScheduleItem
-import com.widthus.app.screen.AppNavigation
 import com.widthus.app.screen.BackButton
 import com.widthus.app.screen.ImageMediaManager
-import com.widthus.app.utils.isUriEmpty
 import com.widthus.app.viewmodel.AuthViewModel
 import com.widthus.app.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
@@ -91,150 +87,20 @@ import com.withus.app.R
 import org.withus.app.debug
 import org.withus.app.model.CoupleQuestionData
 import org.withus.app.model.JoinCouplePreviewData
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.unit.Dp
+import org.withus.app.model.UserAnswerInfo
 
-@Composable
-fun TestHomeScreen(
-    nickname: String,
-    schedules: List<ScheduleItem>,
-    memories: List<MemoryItem>,
-    onNavigateToCalendar: () -> Unit
-) {
-    Scaffold(
-        topBar = { TopTitleBar("LOGO") }, bottomBar = {
-            Column {
-                Button(
-                    onClick = onNavigateToCalendar,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
-                ) { Text("다음 화면 (캘린더) 보기") }
-                AppBottomNavigation()
-            }
-        }, containerColor = Color.White
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // D-day 섹션 (기존 유지)
-            RoundedGrayBox(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .background(Color(0xFFD6D6D6), CircleShape)
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(nickname.ifEmpty { "유저" }, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("D+300", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("상대방", fontSize = 14.sp)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .background(Color(0xFFD6D6D6), CircleShape)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(30.dp))
-
-            // 실제 데이터를 받는 일정 리스트
-            ScheduleListSection(schedules = schedules)
-
-            Spacer(modifier = Modifier.height(30.dp))
-
-            // 실제 데이터를 받는 추억 그리드
-            MemoryGridSection(memories = memories)
-
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-    }
+enum class QuestionState {
+    EMPTY,          // 둘 다 안 올림
+    PARTNER_ONLY,   // 상대만 올림 (나에게는 잠금 상태)
+    ME_ONLY,        // 나만 올림 (상대 기다리는 중)
+    BOTH            // 둘 다 올림 (완성!)
 }
 
-@Composable
-fun CalendarHomeScreen(
-    nickname: String, memories: List<MemoryItem>, onNavigateToDayUs: () -> Unit
-) {
-    val today = remember { Calendar.getInstance().get(Calendar.DAY_OF_MONTH) }
-    var selectedDate by remember { mutableStateOf(today) }
-
-    Scaffold(
-        topBar = { TopTitleBar("LOGO") }, bottomBar = {
-            Column {
-                Button(
-                    onClick = onNavigateToDayUs,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                ) { Text("다음 화면 (DAYUS) 보기") }
-                AppBottomNavigation()
-            }
-        }, containerColor = Color.White
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // 상단 D-Day 카드
-            RoundedGrayBox(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp), color = Color(0xFFF2F2F2)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxSize()
-                ) {
-                    Text("${nickname}님과 함께한지", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("300일", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 주간 캘린더 영역
-            WeeklyCalendar(
-                selectedDate = selectedDate, onDateSelected = { newDate -> selectedDate = newDate })
-
-            // 일정 안내 문구
-            RoundedGrayBox(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                color = Color(0xFFF2F2F2)
-            ) {
-                Text(
-                    "일정을 공유해 보세요",
-                    modifier = Modifier.padding(16.dp),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 추억 그리드
-            MemoryGridSection(memories = memories)
-        }
-    }
+object MainTab {
+    const val TODAY_QUESTION = "오늘의 질문"
+    const val TODAY_DAILY = "오늘의 일상"
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
@@ -249,7 +115,7 @@ fun StepInputScreen(
     val sheetState = rememberModalBottomSheetState()
     val context = LocalContext.current
 
-    val nickname = viewModel.currentUserInfo.nickname
+    val nickname = viewModel.currentUserInfo.nickname.text
     // 에러 상태 체크
     val isNicknameError =
         nickname.isNotEmpty() && (nickname.length !in 2..8)
@@ -278,9 +144,11 @@ fun StepInputScreen(
         topBar = {
             // 2단계나 4단계일 때 뒤로가기 버튼 표시
             if (currentStep != 1) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, top = 8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, top = 8.dp)
+                ) {
                     IconButton(onClick = {
                         currentStep = if (currentStep == 4) 2 else 1
                     }) {
@@ -328,25 +196,18 @@ fun StepInputScreen(
 
             // 2. 입력 영역 (닉네임 & 생일)
             if (currentStep == 1 || currentStep == 2) {
-                val textValue = if (currentStep == 1) {
-                    // String인 nickname을 TextFieldValue로 변환 (커서 위치는 마지막으로 설정)
-                    TextFieldValue(
-                        text = currentText,
-                        selection = TextRange(nickname.length)
-                    )
-                } else {
-                    // 이미 TextFieldValue인 birthdayValue 사용
-                    viewModel.birthdayValue
+                val textValue = when (currentStep) {
+                    1 -> viewModel.currentUserInfo.nickname // 뷰모델 상태 객체를 그대로 사용
+                    2 -> viewModel.birthdayValue
+                    else -> TextFieldValue("")
                 }
 
                 OutlinedTextField(
-                    value = textValue, // 이제 항상 TextFieldValue 타입입니다.
+                    value = textValue,
                     onValueChange = { newValue ->
                         if (currentStep == 1) {
-                            // 닉네임 업데이트 (String만 추출해서 전달)
-                            if (newValue.text.length <= 8) {
-                                viewModel.updateNickname(newValue.text)
-                            }
+                            // TextFieldValue를 통째로 넘겨야 조합 상태가 유지됩니다.
+                            viewModel.updateNickname(newValue)
                         } else {
                             viewModel.updateBirthday(newValue)
                         }
@@ -408,7 +269,7 @@ fun StepInputScreen(
 
             } else {
                 // (4단계 프로필 등록 UI - 기존 코드 유지)
-                ProfileImagePicker(viewModel.currentUserInfo.profileUrl) { showSheet = true }
+                ProfileImagePicker(viewModel.currentUserInfo.selectedLocalUri) { showSheet = true }
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -463,7 +324,8 @@ fun StepInputScreen(
                         )
                     }, modifier = Modifier.clickable {
                         mediaManager.launchCamera {
-                            viewModel.currentUserInfo.copy(profileUrl = it)
+                            showSheet = false
+                            viewModel.updateProfileUrl(it)
                         }
                     })
                     ListItem(headlineContent = { Text("앨범에서 가져오기") }, leadingContent = {
@@ -472,133 +334,12 @@ fun StepInputScreen(
                         )
                     }, modifier = Modifier.clickable {
                         mediaManager.launchGallery {
-                            viewModel.currentUserInfo.copy(profileUrl = it)
+                            showSheet = false
+                            viewModel.updateProfileUrl(it)
                         }
                     })
                 }
             }
-        }
-    }
-}
-
-// --- 홈 화면 ---
-@Composable
-fun TestHomeScreen(
-    nickname: String, onNavigateToCalendar: () -> Unit
-) {
-    Scaffold(
-        topBar = { TopTitleBar("LOGO") }, bottomBar = {
-            // 데모용: 네비게이션 바 대신 다음 화면 버튼 포함
-            Column {
-                Button(
-                    onClick = onNavigateToCalendar,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
-                ) {
-                    Text("다음 화면 (캘린더) 보기")
-                }
-                AppBottomNavigation()
-            }
-        }, containerColor = Color.White
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // D-day 카드
-            RoundedGrayBox(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .background(Color(0xFFD6D6D6), CircleShape)
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(nickname.ifEmpty { "유저" }, fontSize = 14.sp) // 닉네임 표시
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("D+300", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("상대방", fontSize = 14.sp)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .background(Color(0xFFD6D6D6), CircleShape)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(30.dp))
-            Text("오늘 일정", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(12.dp))
-            RoundedGrayBox(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-            )
-            Spacer(modifier = Modifier.height(30.dp))
-            MemoryGridSection()
-        }
-    }
-}
-
-// --- 캘린더 홈 화면 ---
-@Composable
-fun CalendarHomeScreen(
-    nickname: String, onNavigateToDayUs: () -> Unit
-) {
-    Scaffold(
-        topBar = { TopTitleBar("LOGO") }, bottomBar = {
-            Column {
-                Button(
-                    onClick = onNavigateToDayUs,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                ) {
-                    Text("다음 화면 (DAYUS) 보기")
-                }
-                AppBottomNavigation()
-            }
-        }, containerColor = Color.White
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            RoundedGrayBox(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp), color = Color(0xFFF2F2F2)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .fillMaxSize()
-                ) {
-                    Text("${nickname}님과 함께한지", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("300일", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-            Spacer(modifier = Modifier.height(20.dp))
-            // (캘린더 UI 생략 - 이전 코드와 동일)
-            Text("주간 캘린더 영역 (생략)", color = Color.Gray)
-            Spacer(modifier = Modifier.height(20.dp))
-            MemoryGridSection()
         }
     }
 }
@@ -1200,173 +941,112 @@ fun ConnectionPendingScreen(
 }
 
 @Composable
-fun ConnectConfirmScreen(
-    onConfirmClick: (String) -> Unit,
-    onLaterClick: () -> Unit,
-    navController: NavHostController
+fun CoupleConnectionLayout(
+    title: String,
+    subtitle: String,
+    @DrawableRes imageRes: Int,
+    imageHeight: Dp = 200.dp,
+    primaryButtonText: String,
+    onPrimaryClick: () -> Unit,
+    secondaryButton: @Composable (() -> Unit)? = null // '다음에 할래요' 같은 선택적 버튼
 ) {
-
-    val savedStateHandle = navController.currentBackStackEntry?.savedStateHandle
-    val previewFlow = savedStateHandle?.getStateFlow<JoinCouplePreviewData?>("join_preview", null)
-    val preview by previewFlow?.collectAsState() ?: remember { mutableStateOf(null) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 20.dp), // 바닥 면 여유
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // 1. 상단 여백 (콘텐츠를 중앙으로 밀어줌)
+        Spacer(modifier = Modifier.weight(1f))
+
+        // 2. 콘텐츠 영역 (텍스트 + 이미지)
         Text(
-            "${preview?.senderName}님이\n ${preview?.receiverName} 님을 초대했어요!",
+            text = title,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            lineHeight = 32.sp
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = subtitle,
+            fontSize = 16.sp,
+            color = Color.Gray,
             textAlign = TextAlign.Center
         )
-        Text("초대를 수락하면, 두 사람의 기록이 이어져요", fontSize = 18.sp)
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        Box(
+        Image(
+            painter = painterResource(id = imageRes),
+            contentDescription = null,
             modifier = Modifier
-                .size(width = 300.dp, height = 200.dp)
-                .background(Color(0xFFE6E6E6)),
-            contentAlignment = Alignment.Center
-        ) {
-            val profileImageUri = LocalUserNickname.current.profileUrl
-            if (profileImageUri == null) {
-                Icon(
-                    Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(80.dp),
-                    tint = Color.LightGray
-                )
-            } else {
-                AsyncImage(
-                    model = profileImageUri,
-                    contentDescription = "프로필 이미지",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
+                .fillMaxWidth()
+                .height(imageHeight),
+            contentScale = ContentScale.Fit
+        )
 
-            }
-        }
+        // 3. 하단 여백 (콘텐츠와 버튼 사이 균형)
+        Spacer(modifier = Modifier.weight(1.2f))
 
-        Spacer(modifier = Modifier.height(60.dp))
-
+        // 4. 버튼 영역
         Button(
-            onClick = {
-                onConfirmClick(preview!!.inviteCode)
-            },
+            onClick = onPrimaryClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black // 배경 검은색
-            ),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text("초대 수락하기", color = Color.White) // 텍스트 흰색
+            Text(primaryButtonText, color = Color.White, fontWeight = FontWeight.Bold)
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        TextButton(onClick = onLaterClick) {
-            Text("다음에 할래요", color = Color.Gray, textDecoration = TextDecoration.Underline)
+        // 선택적 보조 버튼 (있을 때만 표시)
+        if (secondaryButton != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            secondaryButton()
         }
     }
 }
 
 @Composable
+fun ConnectConfirmScreen(
+    previewData: JoinCouplePreviewData?,
+    onConfirmClick: (String) -> Unit,
+    onLaterClick: () -> Unit,
+) {
+    CoupleConnectionLayout(
+        title = "${previewData?.senderName}님이\n${previewData?.receiverName}님을 초대했어요!",
+        subtitle = "초대를 수락하면, 두 사람의 기록이 이어져요",
+        imageRes = R.drawable.image_connect_noti, // 연결 중 이미지
+        imageHeight = 160.dp,
+        primaryButtonText = "초대 수락하기",
+        onPrimaryClick = { previewData?.let { onConfirmClick(it.inviteCode) } },
+        secondaryButton = {
+            TextButton(onClick = onLaterClick) {
+                Text(
+                    "다음에 할래요",
+                    color = Color.Gray,
+                    textDecoration = TextDecoration.Underline
+                )
+            }
+        }
+    )
+}
+
+@Composable
 fun ConnectCompleteScreen(
-    viewModel: MainViewModel,
     onStartClick: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            "커플 연결 완료!",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        Text("둘만의 사진 기록을 시작해 보세요", fontSize = 18.sp)
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Box(
-            modifier = Modifier
-                .size(width = 300.dp, height = 121.dp)
-                .background(Color(0xFFE6E6E6)),
-            contentAlignment = Alignment.Center
-        ) {
-            val profileImageUri = LocalUserNickname.current.profileUrl
-
-            if (isUriEmpty(profileImageUri)) {
-                Icon(
-                    Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(80.dp),
-                    tint = Color.LightGray
-                )
-            } else {
-                AsyncImage(
-                    model = profileImageUri,
-                    contentDescription = "프로필 이미지",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(26.dp))
-
-        Box(
-            modifier = Modifier
-                .size(width = 300.dp, height = 121.dp)
-                .background(Color(0xFFE6E6E6)),
-            contentAlignment = Alignment.Center
-        ) {
-            val profileImageUri = LocalUserNickname.current.profileUrl
-
-
-            if (isUriEmpty(profileImageUri)) {
-                Icon(
-                    Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(80.dp),
-                    tint = Color.LightGray
-                )
-            } else {
-                AsyncImage(
-                    model = profileImageUri,
-                    contentDescription = "프로필 이미지",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(60.dp))
-
-        Button(
-            onClick = onStartClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Black // 배경 검은색
-            ),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Text("시작하기", color = Color.White) // 텍스트 흰색
-        }
-    }
+    CoupleConnectionLayout(
+        title = "커플 연결 완료!",
+        subtitle = "둘만의 사진 기록을 시작해 보세요",
+        imageRes = R.drawable.image_connect_complete, // 하트 있는 완성 이미지
+        imageHeight = 130.dp,
+        primaryButtonText = "시작하기",
+        onPrimaryClick = onStartClick
+    )
 }
 
 @Composable
@@ -1763,20 +1443,43 @@ fun KeywordSelectionScreen(
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
     onNextClick: () -> Unit,
-    isMyPage: Boolean = false
 ) {
     // 기본 키워드 리스트 (가변 리스트로 선언하여 추가 가능하게 함)
 
-    val keywordList by viewModel.displayKeywords.collectAsState()
+    val context = LocalContext.current
+
+    val defaultKeywords by viewModel.defaultKeywords.collectAsState()
+    val editKeywords by viewModel.editKeywords.collectAsState()
+
+    val isKeywordInit = !viewModel.coupleKeyword.collectAsState().value.isEmpty()
+
+    val keywordContents = remember(isKeywordInit, defaultKeywords, editKeywords) {
+        if (isKeywordInit) {
+            editKeywords.map { it.content }
+        } else {
+            defaultKeywords.map { it.content }
+        }
+    }
 
     LaunchedEffect(Unit) {
-        if (keywordList.isEmpty()) {
+        if (isKeywordInit) {
+            viewModel.loadEditableKeywords()
+        } else {
             viewModel.loadDefaultKeywords()
         }
     }
 
+    val savedCoupleKeywords by viewModel.coupleKeyword.collectAsState()
     var selectedKeywords by remember { mutableStateOf(setOf<String>()) }
     var showAddSheet by remember { mutableStateOf(false) }
+
+    val isNextEnabled = selectedKeywords.size in 1..3
+
+    LaunchedEffect(savedCoupleKeywords) {
+        if (savedCoupleKeywords.isNotEmpty()) {
+            selectedKeywords = savedCoupleKeywords.map { it.content }.toSet()
+        }
+    }
 
     Scaffold(
         containerColor = Color.White, topBar = {
@@ -1822,16 +1525,26 @@ fun KeywordSelectionScreen(
                 modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
             ) {
                 // 3. 서버에서 받아온 리스트로 칩 생성
-                keywordList.forEach { keyword ->
-                    val keywordContent = keyword.content
+                keywordContents.forEach { keyword ->
+                    val keywordContent = keyword
+                    val isSelected = selectedKeywords.contains(keywordContent)
+
                     KeywordChip(
                         text = keywordContent,
-                        isSelected = selectedKeywords.contains(keywordContent),
+                        isSelected = isSelected,
                         onClick = {
-                            selectedKeywords = if (selectedKeywords.contains(keywordContent)) {
+                            selectedKeywords = if (isSelected) {
+                                // 이미 선택된 경우 제거
                                 selectedKeywords - keywordContent
                             } else {
-                                selectedKeywords + keywordContent
+                                // 선택되지 않은 경우: 3개 미만일 때만 추가 허용
+                                if (selectedKeywords.size < 3) {
+                                    selectedKeywords + keywordContent
+                                } else {
+                                    // 3개를 이미 선택한 경우 (선택사항: 토스트 메시지 띄우기)
+                                    // Toast.makeText(context, "최대 3개까지 선택 가능합니다.", Toast.LENGTH_SHORT).show()
+                                    selectedKeywords // 상태 유지
+                                }
                             }
                         }
                     )
@@ -1840,7 +1553,15 @@ fun KeywordSelectionScreen(
                 KeywordChip(
                     text = "+ 직접 추가",
                     isSelected = false,
-                    onClick = { showAddSheet = true },
+                    onClick = {
+                        // 직접 추가할 때도 이미 3개를 채웠는지 확인
+                        if (selectedKeywords.size < 3) {
+                            showAddSheet = true
+                        } else {
+                            Toast.makeText(context, "최대 3개까지 선택 가능합니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+
                     isAddButton = true
                 )
             }
@@ -1848,8 +1569,8 @@ fun KeywordSelectionScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             WithUsButton(
-                text = if (isMyPage) "수정하기" else "다음",
-                enabled = selectedKeywords.isNotEmpty(),
+                text = if (isKeywordInit) "수정하기" else "다음",
+                enabled = isNextEnabled, // 2. 여기 조건 적용
                 onClick = {
                     // ViewModel의 API 호출 함수 실행
                     viewModel.saveKeywords(selectedKeywords) { isSuccess ->
@@ -1869,6 +1590,7 @@ fun KeywordSelectionScreen(
         if (showAddSheet) {
             AddTextBottomSheet(
                 title = "새로운 키워드 추가",
+                text = "",
                 placeholderText = "키워드를 입력해주세요.",
                 onDismissRequest = { showAddSheet = false },
                 onKeywordAdded = { newKeyword ->
@@ -1876,7 +1598,7 @@ fun KeywordSelectionScreen(
                     viewModel.addCustomKeywordToDisplay(newKeyword)
                     // 추가된 키워드 바로 선택 상태로
                     selectedKeywords = selectedKeywords + newKeyword
-                }
+                },
             )
         }
     }
@@ -2043,9 +1765,9 @@ fun KeywordChip(
 @Composable
 fun AddTextBottomSheet(
     title: String, placeholderText: String,
-    onDismissRequest: () -> Unit, onKeywordAdded: (String) -> Unit
+    onDismissRequest: () -> Unit, onKeywordAdded: (String) -> Unit, text: String
 ) {
-    var text by remember { mutableStateOf("") }
+    var text by remember { mutableStateOf(text) }
     val isEnabled = text.isNotBlank()
 
     ModalBottomSheet(
@@ -2115,21 +1837,19 @@ val PlaceholderGalleryIcon = Icons.Default.PhotoLibrary
 fun HomeScreen(
     viewModel: MainViewModel,
     mediaManager: ImageMediaManager,
-    myKeywords: List<String>,
     onNavigateToKeywordSelect: () -> Unit
 ) {
-    val mainTabs = listOf("오늘의 질문", "오늘의 일상")
-    var selectedMainTab by remember { mutableStateOf("오늘의 질문") }
-    var selectedDailyKeyword by remember(myKeywords) { mutableStateOf(myKeywords.firstOrNull()) }
-    val keywords by viewModel.displayKeywords.collectAsState()
+    val mainTabs = listOf(MainTab.TODAY_QUESTION, MainTab.TODAY_DAILY)
+    val selectedMainTab by viewModel.selectedMainTab.collectAsState()
+    val dailyQuestionData = viewModel.questionData
 
-    // 업로드 상태
-    val userImageUri = viewModel.userUploadedImage
-    val partnerImageUri = viewModel.partnerUploadedImage
+    // 2. ViewModel의 StateFlow 구독
+    val keywords by viewModel.coupleKeyword.collectAsState()
+    val selectedKeywordId by viewModel.selectedKeywordId.collectAsState()
 
     LaunchedEffect(Unit) {
-//        viewModel.fetchTodayQuestion()
-        viewModel.fetchTodayQuestionTest()
+        viewModel.fetchTodayQuestion()
+        viewModel.getCoupleKeyword()
     }
 
     Scaffold(
@@ -2141,9 +1861,11 @@ fun HomeScreen(
         },
         containerColor = Color.White
     ) { paddingValues ->
-        Column(modifier = Modifier
-            .padding(paddingValues)
-            .fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+        ) {
 
             // 1. 메인 탭 (질문 vs 일상) UI 구현 (기존 코드 유지)
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -2152,7 +1874,7 @@ fun HomeScreen(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { selectedMainTab = tabTitle },
+                            .clickable { viewModel.updateMainTab(tabTitle)},
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -2179,28 +1901,32 @@ fun HomeScreen(
                     .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(30.dp))
-
-                if (selectedMainTab == "오늘의 질문") {
-                    TodayQuestionContent(
-                        data = viewModel.questionData, // 질문용 데이터
+                if (selectedMainTab == MainTab.TODAY_QUESTION) {
+                    Spacer(modifier = Modifier.height(30.dp))
+                    TodayQuestionContentLegacy(
+                        selectedTab = MainTab.TODAY_QUESTION, // 탭 정보 전달
+                        data = dailyQuestionData, // 질문용 데이터
                         onUpload = { uri -> viewModel.uploadTodayQuestionImage(uri) }, // 질문용 업로드
                         onPoke = { viewModel.pokePartner() },
                         showPokeDialog = viewModel.showPokeSuccessDialog,
                         onDismissPokeDialog = { viewModel.dismissPokeDialog() },
-                        mediaManager = mediaManager
+                        mediaManager = mediaManager,
                     )
                 } else {
-                    if (myKeywords.isEmpty()) {
+                    if (keywords.isEmpty()) {
+                        Spacer(modifier = Modifier.height(30.dp))
                         DailyEmptyContent(onRegisterClick = onNavigateToKeywordSelect)
                     } else {
+                        Spacer(modifier = Modifier.height(12.dp))
                         LazyRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center
                         ) {
                             items(keywords) { keywordInfo ->
                                 // ID 비교로 선택 여부 판단
-                                val isSelected = viewModel.selectedKeywordId == keywordInfo.keywordId.toLong()
+                                debug("viewModel.selectedKeywordId : ${viewModel.selectedKeywordId}")
+                                val isSelected =
+                                    selectedKeywordId == keywordInfo.keywordId.toLong()
 
                                 Surface(
                                     modifier = Modifier
@@ -2218,7 +1944,10 @@ fun HomeScreen(
                                 ) {
                                     Text(
                                         text = keywordInfo.content,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                        modifier = Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 8.dp
+                                        ),
                                         color = if (isSelected) Color(0xFFF05A5A) else Color.Gray
                                     )
                                 }
@@ -2228,15 +1957,15 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(30.dp))
 
                         // 공통 컨텐츠 영역 호출
-                        TodayQuestionContent(
-                            data = viewModel.dailyData, // API 조회 결과
+                        TodayQuestionContentLegacy(
+                            selectedTab = MainTab.TODAY_DAILY, // 탭 정보 전달
+                            data = viewModel.keywordDailyData, // API 조회 결과
                             onUpload = { uri -> viewModel.uploadDailyImage(uri) }, // 현재 선택된 ID로 업로드
                             onPoke = { viewModel.pokePartner() },
                             showPokeDialog = viewModel.showPokeSuccessDialog,
                             onDismissPokeDialog = { viewModel.dismissPokeDialog() },
-                            mediaManager = mediaManager
+                            mediaManager = mediaManager,
                         )
-
                     }
                 }
             }
@@ -2263,9 +1992,11 @@ fun PhotoResponseContainer(
 
     // 1. 둘 다 보냄 (스택형 UI)
     if (isUserUploaded && isPartnerUploaded) {
-        Column(modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+        ) {
             UploadedPhotoItem(
                 imageUri = partnerImageUri,
                 label = "상대방",
@@ -2344,14 +2075,109 @@ fun UploadedPhotoItem(imageUri: Uri?, label: String, modifier: Modifier = Modifi
 }
 
 @Composable
-fun TodayQuestionContent(
+fun QuestionHeader(question: String, title: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = title, fontSize = 14.sp, color = Color.Gray)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = question,
+            fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun ComparisonLayout(
+    myInfo: UserAnswerInfo?,
+    partnerInfo: UserAnswerInfo?,
+    isPartnerUploaded: Boolean,
+    onPoke: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(500.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .background(Color(0xFFF5F5F5))
+    ) {
+        // 내 영역
+        ImageSection(
+            imageUrl = myInfo?.questionImageUrl,
+            profileUrl = myInfo?.profileThumbnailImageUrl,
+            name = myInfo?.name ?: "나",
+            time = myInfo?.answeredAt ?: "방금 전",
+            modifier = Modifier.weight(1f)
+        )
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        // 상대 영역
+        if (isPartnerUploaded) {
+            ImageSection(
+                imageUrl = partnerInfo?.questionImageUrl,
+                profileUrl = partnerInfo?.profileThumbnailImageUrl,
+                name = partnerInfo?.name ?: "상대방",
+                time = partnerInfo?.answeredAt ?: "",
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            // 콕 찌르기 영역
+            PokePlaceholder(onPoke = onPoke, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+fun PokePlaceholder(
+    onPoke: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "사진을 기다리고 있다고\n상대방에게 알림을 보내보세요!",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = onPoke,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(
+                        0xFF222222
+                    )
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    painterResource(id = android.R.drawable.ic_input_add),
+                    null,
+                    tint = Color.White
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("콕 찌르기", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun TodayQuestionContentLegacy(
     data: CoupleQuestionData?, // API에서 받아온 데이터 (질문 or 일상)
     onUpload: (Uri) -> Unit,    // 탭별 업로드 로직 주입 (질문용 or 일상용)
     onPoke: () -> Unit,        // 콕 찌르기 로직 주입
     showPokeDialog: Boolean,    // 콕 찌르기 다이얼로그 상태
     onDismissPokeDialog: () -> Unit,
-    mediaManager: ImageMediaManager
+    mediaManager: ImageMediaManager,
+    selectedTab: String
 ) {
+    debug("TodayQuestionContent ! data : $data")
     var showPhotoFlow by remember { mutableStateOf(false) }
 
     if (data == null) return // 로딩 중 처리
@@ -2362,9 +2188,9 @@ fun TodayQuestionContent(
     var showSheet by remember { mutableStateOf(false) }
 
     // 사진 업로드 여부 판단
-    val isUserUploaded = myInfo.questionImageUrl != null
-    val isPartnerUploaded = partnerInfo.questionImageUrl != null
-
+    val isUserUploaded = myInfo?.questionImageUrl != null
+    val isPartnerUploaded = partnerInfo?.questionImageUrl != null
+    debug("isUserUploaded : $isUserUploaded, isPartnerUploaded : $isPartnerUploaded")
     // 콕 찌르기 다이얼로그
     if (showPokeDialog) {
         PokeSuccessDialog(onDismiss = onDismissPokeDialog)
@@ -2374,6 +2200,7 @@ fun TodayQuestionContent(
         PhotoFlowDialog(
             onFinish = { uri ->
                 showPhotoFlow = false
+                debug("onUpload !")
                 onUpload(uri) // 최종 결과물 처리
             },
             onCancel = { showPhotoFlow = false }
@@ -2383,20 +2210,18 @@ fun TodayQuestionContent(
     if (isUserUploaded) {
         // [나만 보냈거나 둘 다 보낸 경우] -> 2분할 레이아웃
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "#${data.coupleQuestionId ?: ""}.", fontSize = 14.sp, color = Color.Gray)
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = data.question,
-                fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(24.dp))
 
             Box(
-                modifier = Modifier.fillMaxWidth().height(500.dp).clip(RoundedCornerShape(32.dp)).background(Color(0xFFF5F5F5))
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(500.dp)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(Color(0xFFF5F5F5))
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // [위 영역] 나
-                    ImageSection(
+                    ImageSectionLegacy(
                         imageUrl = myInfo?.questionImageUrl,
                         profileUrl = myInfo?.profileThumbnailImageUrl,
                         name = myInfo?.name ?: "나",
@@ -2408,7 +2233,7 @@ fun TodayQuestionContent(
 
                     // [아래 영역] 상대방
                     if (isPartnerUploaded) {
-                        ImageSection(
+                        ImageSectionLegacy(
                             imageUrl = partnerInfo?.questionImageUrl,
                             profileUrl = partnerInfo?.profileThumbnailImageUrl,
                             name = partnerInfo?.name ?: "상대방",
@@ -2417,16 +2242,34 @@ fun TodayQuestionContent(
                         )
                     } else {
                         // 상대방 대기 및 콕 찌르기 영역
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("사진을 기다리고 있다고\n상대방에게 알림을 보내보세요!", color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center)
+                                Text(
+                                    "사진을 기다리고 있다고\n상대방에게 알림을 보내보세요!",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.Center
+                                )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(
                                     onClick = onPoke,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(
+                                            0xFF222222
+                                        )
+                                    ),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(painterResource(id = android.R.drawable.ic_input_add), null, tint = Color.White)
+                                    Icon(
+                                        painterResource(id = android.R.drawable.ic_input_add),
+                                        null,
+                                        tint = Color.White
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("콕 찌르기", fontWeight = FontWeight.Bold)
                                 }
@@ -2439,59 +2282,145 @@ fun TodayQuestionContent(
     } else {
         // [아무도 안 보냈거나 상대방만 보낸 경우] -> 통합 카드 레이아웃
         val isPartnerOnly = isPartnerUploaded
+
         Card(
-            modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(0.75f), // 이미지와 유사한 비율 유지
+            shape = RoundedCornerShape(32.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
+                // 1. 배경 설정 (상대방만 보냈을 경우 블러 이미지 배경)
                 if (isPartnerOnly) {
                     AsyncImage(
                         model = partnerInfo?.questionImageUrl,
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize().blur(30.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(30.dp), // 강한 블러 효과
                         contentScale = ContentScale.Crop
                     )
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+                    // 이미지 위를 어둡게 덮어서 글씨 가독성 확보
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.3f))
+                    )
                 }
 
-                Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    // 상단 프로필 (상대방만 보냈을 때)
+                // 2. 카드 내부 콘텐츠
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // [상단 영역] 상대방 정보 (상대방만 보냈을 때 표시)
                     if (isPartnerOnly) {
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             AsyncImage(
-                                model = partnerInfo?.profileThumbnailImageUrl ?: R.drawable.image_today_question_default,
+                                model = partnerInfo?.profileThumbnailImageUrl,
                                 contentDescription = null,
-                                modifier = Modifier.size(36.dp).clip(CircleShape)
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
-                                Text(partnerInfo?.name ?: "상대방", color = Color.White, fontWeight = FontWeight.Bold)
-                                Text("${partnerInfo?.answeredAt ?: ""} 응답", color = Color.White.copy(0.8f), fontSize = 12.sp)
+                                Text(
+                                    text = partnerInfo?.name ?: "상대방",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                Text(
+                                    text = "${partnerInfo?.answeredAt ?: "방금 전"} 응답",
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 12.sp
+                                )
                             }
                         }
                     }
 
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        Text(text = "#${data.coupleQuestionId ?: ""}.", fontSize = 14.sp, color = if(isPartnerOnly) Color.White.copy(0.7f) else Color.Gray)
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(text = data.question, fontSize = 22.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = if(isPartnerOnly) Color.White else Color.Black)
-                    }
+                    val title = if (selectedTab == MainTab.TODAY_QUESTION) "#${data.coupleQuestionId}" else "오늘의 일상"
+                    debug("title : $title, selectedTab : $selectedTab")
 
-                    Button(
-                        onClick = {
-                            showSheet = true
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
+                    // [중앙 영역] 질문 정보 및 일러스트
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Text("사진 전송하기", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = title,
+                            fontSize = 16.sp,
+                            color = if (isPartnerOnly) Color.White.copy(alpha = 0.7f) else Color.Gray,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = data.question,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = if (isPartnerOnly) Color.White else Color.Black,
+                            lineHeight = 30.sp
+                        )
+
+                        // 아무도 안 보냈을 때만 일러스트 표시 (image_f4b25d.png 참고)
+                        if (!isPartnerOnly) {
+                            Spacer(modifier = Modifier.height(30.dp))
+                            AsyncImage(
+                                model = R.drawable.image_today_question_default, // 강아지/고양이 일러스트
+                                contentDescription = null,
+                                modifier = Modifier.size(160.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
                     }
 
-                    val text = if (isPartnerOnly) "내 사진을 공유하고 상대의 사진을 확인해보세요." else "먼저 오늘의 질문에 답해보세요."
-                    Text(text, color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(vertical = 16.dp))
+                    // [하단 영역] 버튼 및 안내 문구
+                    Button(
+                        onClick = { showSheet = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF222222)
+                        )
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoCamera,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "사진 전송하기",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
 
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = if (isPartnerOnly) "내 사진을 공유하고 상대의 사진을 확인해보세요."
+                        else "먼저 오늘의 질문에 답해보세요.",
+                        color = if (isPartnerOnly) Color.White.copy(alpha = 0.6f) else Color.Gray,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
 
                     ImageBottomSheet(
                         showSheet = showSheet,
@@ -2511,297 +2440,209 @@ fun TodayQuestionContent(
 }
 
 @Composable
-fun DailyActiveContent(
-    keywords: List<String>,
-    selectedKeyword: String,
-    onKeywordSelected: (String) -> Unit,
-    userImageUri: Uri?,
-    partnerImageUri: Uri?,
-    mediaManager: ImageMediaManager,
-    onUpload: (Uri) -> Unit
+fun ImageSectionLegacy(
+    imageUrl: String?,
+    profileUrl: String?,
+    name: String,
+    time: String,
+    modifier: Modifier
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // 키워드 리스트 (기존 코드 유지)
-        LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            items(keywords) { keyword ->
-                val isSelected = keyword == selectedKeyword
-                Surface(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .clickable { onKeywordSelected(keyword) },
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.White,
-                    border = BorderStroke(
-                        1.dp,
-                        if (isSelected) Color(0xFFF05A5A) else Color(0xFFE0E0E0)
-                    )
-                ) {
-                    Text(
-                        text = keyword,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        color = if (isSelected) Color(0xFFF05A5A) else Color.Gray
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // 나만 보냈을 때 (스크린샷 2번 스타일: 콕 찌르기 버튼)
-        if (userImageUri != null && partnerImageUri == null) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // 1. 내 사진 카드
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f) // 1:1 정방형
-                        .clip(RoundedCornerShape(24.dp))
-                ) {
-                    AsyncImage(
-                        model = userImageUri,
-                        contentDescription = "내 사진",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                    // 상단 프로필 오버레이
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color.LightGray)
-                        ) // 내 프사
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                "jpg",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text("PM 12:30", color = Color.White, fontSize = 10.sp)
-                        }
-                    }
-                    // 하단 캡션 (말풍선 느낌)
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 20.dp)
-                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text("국밥 먹는중이지롱 ! 오빠는 점심 뭐먹어 ??", color = Color.White, fontSize = 12.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(30.dp))
-
-                // 2. 하단 텍스트 및 콕 찌르기 버튼
-                Text(
-                    "사진을 기다리고 있다고\n상대방에게 알림을 보내보세요!",
-                    textAlign = TextAlign.Center,
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = { /* 콕 찌르기 액션 */ },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
-                ) {
-                    // 손가락 아이콘 (없으면 기본 아이콘 사용)
-                    Icon(
-                        painter = painterResource(id = android.R.drawable.ic_input_add),
-                        contentDescription = null,
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("콕 찌르기", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        } else {
-            // 그 외 (아직 안 보냄 or 둘 다 보냄) - 기존 로직 유지
-            Text("오늘의 일상", fontSize = 14.sp, color = Color.Gray)
-            // ... (타이틀 텍스트 등 생략) ...
-
-            Spacer(modifier = Modifier.height(20.dp))
-            PhotoResponseContainer(
-                userImageUri = userImageUri,
-                partnerImageUri = partnerImageUri,
-                onUploadClick = { mediaManager.launchCamera { uri -> onUpload(uri) } },
-                uploadButtonText = "사진 촬영하기",
-                isDailyMode = true
+    debug("imageUrl : $imageUrl")
+    Box(modifier = modifier.fillMaxWidth()) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.Center
+        )
+        // 상단 오버레이 정보
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = profileUrl ?: R.drawable.image_today_question_default,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color.Gray)
             )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(time, color = Color.White.copy(0.8f), fontSize = 10.sp)
+            }
         }
     }
 }
+
+
+@Composable
+fun LockedCardLayout(
+    uiState: QuestionState,
+    data: CoupleQuestionData?,
+    title: String,
+    onUploadClick: () -> Unit
+) {/*
+    Card(
+        modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),
+        shape = RoundedCornerShape(32.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 상대방만 보냈을 때 배경에 블러 처리된 상대 사진 노출
+            if (uiState == QuestionState.PARTNER_ONLY) {
+                AsyncImage(
+                    model = data?.partnerInfo?.questionImageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().blur(30.dp),
+                    contentScale = ContentScale.Crop
+                )
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+            }
+
+            // 중앙 콘텐츠 (일러스트 혹은 문구)
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+
+                QuestionHeader(question = data!!.question, title)
+                Spacer(modifier = Modifier.height(24.dp))
+
+                if (uiState == QuestionState.EMPTY) {
+                    Image(
+                        painter = painterResource(id = R.drawable.image_today_question_default),
+                        contentDescription = null,
+                        modifier = Modifier.size(160.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = { showSheet = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF222222)
+                    )
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoCamera,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "사진 전송하기",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+
+                Text(
+                    text = if (uiState == QuestionState.PARTNER_ONLY) "내 사진을 공유하고 상대의 사진을 확인해보세요."
+                    else "먼저 오늘의 질문에 답해보세요.",
+                    color = if (uiState == QuestionState.PARTNER_ONLY) Color.White.copy(alpha = 0.6f) else Color.Gray,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
+
+            }
+        }
+    }
+
+    ImageBottomSheet(
+        showSheet = showSheet,
+        onDismiss = { showSheet = false },
+        onCameraClick = { showSheet = false; showPhotoFlow = true },
+        onGalleryClick = { mediaManager.launchGallery { onUpload(it) } }
+    )
+*/}
+
 
 @Composable
 fun DailyEmptyContent(onRegisterClick: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
+    // 1. 전체 배경 (회색)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF7F7F7)) // 배경색 (이미지와 유사한 연회색)
+            .padding(horizontal = 20.dp), // 좌우 여백
+        contentAlignment = Alignment.Center // 화면 중앙 정렬
     ) {
-        Text(text = "키워드 설정", fontSize = 14.sp, color = Color.Gray)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "사진을 공유할 키워드를 등록하고\n일상을 특별하게 기록해보세요",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            lineHeight = 28.sp
-        )
-        Spacer(modifier = Modifier.height(40.dp))
-        Box(
-            modifier = Modifier
-                .size(240.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFFD9D9D9))
-        )
-        Spacer(modifier = Modifier.height(40.dp))
-        Button(
-            onClick = onRegisterClick,
+        // 2. 카드 영역 (하얀색 박스)
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
+                .wrapContentHeight(), // 내용은 내용물만큼만 높이 차지
+            shape = RoundedCornerShape(24.dp), // 둥근 모서리 (이미지와 유사하게)
+            color = Color.White,
+            shadowElevation = 4.dp // 살짝 그림자 추가 (선택사항, 입체감)
         ) {
-            Text("키워드 등록하기", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
+            // 3. 카드 내부 내용물
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(vertical = 40.dp, horizontal = 24.dp) // 카드 내부 여백
+            ) {
+                Text(
+                    text = "키워드 설정",
+                    fontSize = 14.sp,
+                    color = Color(0xFF888888), // 조금 더 진한 회색
+                    fontWeight = FontWeight.Medium
+                )
 
-@Composable
-fun UploadedContentCard(
-    userImageUri: Uri?,
-    partnerImageUri: Uri?,
-    userComment: String,
-    partnerComment: String,
-    isUserUploaded: Boolean,
-    isPartnerUploaded: Boolean,
-    onUploadClick: () -> Unit
-) {/*
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        when {
-            // 1. 둘 다 업로드했을 때: 2분할 레이아웃
-            isUserUploaded && isPartnerUploaded -> {
-                Box(
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "사진을 공유할 키워드를 등록하고\n일상을 특별하게 기록해보세요",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 30.sp, // 줄 간격 넉넉하게
+                    color = Color.Black
+                )
+
+                Spacer(modifier = Modifier.height(40.dp))
+
+                // 이미지 (크기 조절 및 비율 유지)
+                AsyncImage(
+                    model = R.drawable.image_keyword_setting,
+                    contentDescription = "키워드 설정 일러스트",
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(500.dp)
-                        .clip(RoundedCornerShape(32.dp))
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        ImageSection(
-                            partnerImageUri,
-                            "쏘피",
-                            "PM 12:30",
-                            partnerComment,
-                            true,
-                            Modifier.weight(1f)
-                        )
-                        ImageSection(
-                            userImageUri,
-                            "jpg",
-                            "PM 12:30",
-                            userComment,
-                            true,
-                            Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
+                        .size(160.dp), // 이미지 크기 고정 (적절히 조절하세요)
+                    contentScale = ContentScale.Fit // 잘리지 않게 비율 유지
+                )
 
-            // 2. 나만 업로드했을 때: 내 사진 전체 + 상대 대기 문구
-            isUserUploaded && !isPartnerUploaded -> {
-                // 상단 대기 안내 영역
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0xFFE0E0E0))
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "jpg님이 쏘피님의 사진을\n기다리고 있어요!",
-                        textAlign = TextAlign.Center,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { *//* 콕 찌르기 등 *//* },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text("콕 찌르기 →", color = Color.White) }
-                }
+                Spacer(modifier = Modifier.height(40.dp))
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // 내 사진 단독 표시
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp)
-                        .clip(RoundedCornerShape(32.dp))
-                ) {
-                    ImageSection(
-                        userImageUri,
-                        "jpg",
-                        "PM 12:30",
-                        userComment,
-                        true,
-                        Modifier.fillMaxSize()
-                    )
-                }
-            }
-
-            // 3. 상대만 업로드했을 때: 버튼 먼저 + 블러 처리된 상대 사진
-            !isUserUploaded && isPartnerUploaded -> {
+                // 버튼
                 Button(
-                    onClick = onUploadClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222)),
+                    onClick = onRegisterClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                ) { Text("앨범으로 이동하기 →", color = Color.White) }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // 블러 처리된 상대방 사진 영역
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(250.dp)
-                        .clip(RoundedCornerShape(32.dp))
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF222222) // 진한 검정색
+                    )
                 ) {
-                    // 실제 구현 시에는 이미지를 가져와서 Blur 처리를 해야 함
-                    ImageSection(
-                        partnerImageUri,
-                        "jpg",
-                        "1시간 전 응답",
-                        "",
-                        true,
-                        Modifier.fillMaxSize(),
-                        isBlurred = true
+                    Text(
+                        text = "키워드 등록하기",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
         }
     }
-*/
 }
 
 @Composable
@@ -2817,14 +2658,18 @@ fun ImageSection(
             model = imageUrl,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.Center
         )
         // 상단 오버레이 정보
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
                 model = profileUrl ?: R.drawable.image_today_question_default,
                 contentDescription = null,
-                modifier = Modifier.size(32.dp).clip(CircleShape).background(Color.Gray)
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color.Gray)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Column {
@@ -3005,11 +2850,4 @@ fun PokeSuccessDialog(onDismiss: () -> Unit) {
         containerColor = Color.White,
         shape = RoundedCornerShape(16.dp)
     )
-}
-
-// 프리뷰
-@androidx.compose.ui.tooling.preview.Preview
-@Composable
-fun PreviewApp() {
-    AppNavigation()
 }

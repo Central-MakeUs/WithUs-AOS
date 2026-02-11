@@ -21,4 +21,4 @@ enum class MemoryStatus {
     UNAVAILABLE, NEED_CREATE, CREATED
 }
 
-data class CreateMemoryRequest(val imageKey: String)
+data class CreateMemoryRequest(val imageKey: String, val title: String? = null)

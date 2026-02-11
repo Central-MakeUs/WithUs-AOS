@@ -1,5 +1,6 @@
 package org.withus.app.di
 
+import com.google.gson.GsonBuilder
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,6 +21,10 @@ import javax.inject.Singleton
 object NetworkModule {
 
     const val BASE_URL = "https://withus.p-e.kr/"
+
+    val gson = GsonBuilder()
+        .serializeNulls()
+        .create()
 
     @Provides
     @Singleton
@@ -48,7 +53,7 @@ object NetworkModule {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
 
     @Provides

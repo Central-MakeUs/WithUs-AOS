@@ -63,6 +63,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.widthus.app.model.GridItem
 import com.widthus.app.model.MemorySet
 import com.widthus.app.model.QuestionAnswer
 import com.widthus.app.viewmodel.MainViewModel
@@ -71,13 +72,14 @@ import kotlinx.coroutines.launch
 import org.withus.app.debug
 import org.withus.app.model.ArchiveDetailItem
 import org.withus.app.model.ArchiveQuestionItem
+import org.withus.app.model.ArchiveUserAnswerInfo
 import org.withus.app.model.CalendarDayInfo
-import org.withus.app.model.CoupleQuestionData
 import org.withus.app.model.QuestionDetailResponse
 import org.withus.app.model.UserAnswerInfo
 import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 enum class ViewMode { LATEST, CALENDAR, QUESTION }
@@ -97,17 +99,17 @@ fun GalleryScreen(
     val isEmpty = when (viewMode) {
         ViewMode.LATEST -> viewModel.archiveItems.isEmpty()
         ViewMode.QUESTION -> viewModel.archiveQuestions.isEmpty()
-        ViewMode.CALENDAR -> viewModel.calendarDays.isEmpty()
+        ViewMode.CALENDAR -> /*viewModel.calendarDays.isEmpty()*/ false
     }
 
     LaunchedEffect(viewMode) {
         when (viewMode) {
             ViewMode.LATEST -> {
-                if (viewModel.archiveItems.isEmpty()) viewModel.fetchArchives(true)
+                viewModel.fetchArchives(true)
             }
 
             ViewMode.QUESTION -> {
-                if (viewModel.archiveQuestions.isEmpty()) viewModel.fetchQuestionArchives(true)
+                viewModel.fetchQuestionArchives(true)
             }
 
             ViewMode.CALENDAR -> {
@@ -150,21 +152,39 @@ fun GalleryScreen(
             ) {
                 Scaffold(topBar = {
                     Column(modifier = Modifier.background(Color.White)) {
-                        CenterAlignedTopAppBar(
-                            title = { Text("추억", fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                        TopAppBar(
+                            title = {
+                                Text(
+                                    text = "보관",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
                             actions = {
+                                // 기존에 사용하던 actions 로직을 그대로 넣으면 됩니다.
                                 if (!isSelectionMode) {
-                                    IconButton(onClick = { isSelectionMode = true }) {
-                                        Icon(Icons.Default.MoreHoriz, "더보기", tint = Color.Black)
+                                    if (viewMode == ViewMode.LATEST) {
+                                        IconButton(onClick = { isSelectionMode = true }) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreHoriz,
+                                                contentDescription = "더보기",
+                                                tint = Color.Black
+                                            )
+                                        }
                                     }
+
                                 } else {
                                     TextButton(onClick = {
                                         isSelectionMode = false
                                         selectedIds.clear()
-                                    }) { Text("취소", color = Color.Black) }
+                                    }) {
+                                        Text("취소", color = Color.Black)
+                                    }
                                 }
                             },
-                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.White
+                            )
                         )
 
                         if (!isSelectionMode) {
@@ -220,10 +240,11 @@ fun GalleryScreen(
                         ) {
                             Box(modifier = Modifier.weight(1f)) {
 
+
                                 when (viewMode) {
                                     ViewMode.LATEST -> {
                                         LatestGridView(
-                                            items = viewModel.archiveItems, // (String, UserAnswerInfo) 페어 리스트
+                                            items = viewModel.archiveItems,
                                             isSelectionMode = isSelectionMode,
                                             selectedIds = selectedIds,
                                             onToggleSelect = { id ->
@@ -243,7 +264,7 @@ fun GalleryScreen(
                                                 // 2. 상세 API 호출 (아이템 식별을 위해 id와 type 전달)
                                                 viewModel.fetchDetailByDate(
                                                     date = date,
-                                                    targetId = info.userId,          // UserAnswerInfo에 id 필드가 있어야 함
+                                                    targetId = info.id,          // UserAnswerInfo에 id 필드가 있어야 함
 //                                            targetType = info. // UserAnswerInfo에 archiveType 필드가 있어야 함
                                                 )
 
@@ -297,7 +318,8 @@ fun GalleryScreen(
             }
         }
 
-    }}
+    }
+}
 
 // ====================================================================
 // 🧩 하위 컴포넌트들
@@ -326,46 +348,73 @@ fun ToggleOption(text: String, isSelected: Boolean, onClick: () -> Unit) {
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun LatestGridView(
-    items: List<Pair<String, UserAnswerInfo>>, // 변경된 타입
+    items: List<Pair<String, ArchiveUserAnswerInfo>>, // ViewModel 타입과 일치시킴
     isSelectionMode: Boolean,
     selectedIds: List<Long>,
     onToggleSelect: (Long) -> Unit,
     onLongClick: (Long) -> Unit,
     onItemClick: (Int) -> Unit,
-    loadMore: () -> Unit // 페이지네이션 콜백 추가
+    loadMore: () -> Unit
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
+        modifier = Modifier.fillMaxSize().background(Color.White),
         contentPadding = PaddingValues(1.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         itemsIndexed(items) { index, item ->
-            // [페이지네이션] 리스트 끝에 도달하면 다음 페이지 요청
+            // 페이지네이션 호출
             if (index >= items.size - 1) {
                 LaunchedEffect(Unit) { loadMore() }
             }
 
-            val dateString = item.first // "2026-01-28"
-            val info = item.second     // 이미지 정보
+            val dateString = item.first     // "2026-02-10"
+            val info = item.second          // ArchiveUserAnswerInfo 객체
+            val itemId = info.id            // 식별자
 
-            val itemId = info.userId.toLong() // 임시 식별자
+            Box(
+                modifier = Modifier
+                    .aspectRatio(3f / 4f)
+                    .background(Color.White)
+                    .combinedClickable(
+                        onClick = {
+                            if (isSelectionMode) onToggleSelect(itemId)
+                            else onItemClick(index)
+                        },
+                        onLongClick = { onLongClick(itemId) }
+                    )
+            ) {
+                // --- [핵심] 이미지 위아래 배치 ---
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // 1. 내 이미지 (위)₩
+                    if (!info.myImageUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = info.myImageUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .weight(1f)         // [핵심] 5:5 비율을 위해 동일한 가중치 부여
+                                .fillMaxWidth()     // 가로 꽉 채우기
+                                .fillMaxHeight(),   // 할당된 weight 안에서 세로 꽉 채우기
+                            contentScale = ContentScale.Crop // [핵심] 비율이 달라도 잘라서 꽉 채움
+                        )
+                    }
 
-            Box(modifier = Modifier
-                .aspectRatio(3f / 4f)
-                .combinedClickable(onClick = {
-                    if (isSelectionMode) onToggleSelect(itemId)
-                    else onItemClick(index)
-                }, onLongClick = { onLongClick(itemId) })) {
-                // 이미지 표시
-                AsyncImage(
-                    model = info.questionImageUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                    // 2. 파트너 이미지 (아래)
+                    if (!info.partnerImageUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = info.partnerImageUrl,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .weight(1f)         // [핵심] 위 이미지와 동일한 1f 가중치
+                                .fillMaxWidth()
+                                .fillMaxHeight(),
+                            contentScale = ContentScale.Crop // [핵심] 동일하게 크롭 적용
+                        )
+                    }
+                }
 
-                // 날짜 배지 표시 (예: 1월 28일)
+                // 날짜 배지 (예: 2월 10일)
                 val formattedDate = remember(dateString) {
                     try {
                         val date = LocalDate.parse(dateString)
@@ -377,20 +426,15 @@ fun LatestGridView(
 
                 Box(
                     modifier = Modifier
-                        .padding(8.dp)
+                        .padding(6.dp)
                         .align(Alignment.TopStart)
-                        .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
                 ) {
-                    Text(
-                        text = formattedDate,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
+                    Text(text = formattedDate, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
 
-                // 선택 모드 UI (기존과 동일)
+                // 선택 모드 오버레이 및 체크박스
                 if (isSelectionMode) {
                     val isSelected = selectedIds.contains(itemId)
                     Box(
@@ -398,29 +442,21 @@ fun LatestGridView(
                             .fillMaxSize()
                             .background(if (isSelected) Color.Black.copy(0.3f) else Color.Transparent)
                     )
-                    // 체크박스 (우측 상단)
+                    // 체크박스 UI (우측 상단)
                     Box(
                         modifier = Modifier
-                            .padding(8.dp)
+                            .padding(6.dp)
                             .align(Alignment.TopEnd)
-                            .size(24.dp)
+                            .size(20.dp)
                             .background(
                                 color = if (isSelected) Color(0xFF222222) else Color.Transparent,
                                 shape = CircleShape
                             )
-                            .border(
-                                1.5.dp,
-                                if (isSelected) Color(0xFF222222) else Color.White,
-                                CircleShape
-                            ), contentAlignment = Alignment.Center
+                            .border(1.dp, if (isSelected) Color(0xFF222222) else Color.White, CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
                         if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
                         }
                     }
                 }
@@ -429,67 +465,51 @@ fun LatestGridView(
     }
 }
 
-// 3. 캘린더 뷰 (간단 구현)
+
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CalendarListView(
-    viewModel: MainViewModel, onDateClick: (String) -> Unit
+    viewModel: MainViewModel,
+    onDateClick: (String) -> Unit
 ) {
-    val calendarData = viewModel.calendarDays
-    val viewDate = viewModel.currentCalendarDate
+    val months = viewModel.displayedMonths
+    val calendarDataMap = viewModel.calendarDataMap
 
-    // 핵심: viewDate(년/월)가 바뀔 때마다 서버 API 호출
-    LaunchedEffect(viewDate.year, viewDate.monthValue) {
-        viewModel.fetchCalendar(viewDate.year, viewDate.monthValue)
-    }
-
+    // 전체 화면 배경색
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF7F7F7)),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp)
+        contentPadding = PaddingValues(bottom = 20.dp), // 하단 여백
+        verticalArrangement = Arrangement.spacedBy(24.dp) // 카드 간 간격
     ) {
+        // 리스트 아이템: 각 "달(Month)"을 그립니다.
+        items(months) { yearMonth ->
+
+            // 핵심: 아이템이 화면에 그려질 때(데이터가 없으면) API 호출
+            LaunchedEffect(yearMonth) {
+                viewModel.fetchCalendar(yearMonth)
+            }
+
+            // 해당 달의 데이터 가져오기 (없으면 null)
+            val daysData = calendarDataMap[yearMonth] ?: emptyList()
+
+            // 월별 카드 UI
+            CalendarMonthCard(
+                yearMonth = yearMonth,
+                calendarDays = daysData,
+                onDayClick = onDateClick
+            )
+        }
+
         item {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp)) {
-                    // --- 캘린더 헤더 (월 변경 컨트롤) ---
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { viewModel.updateCalendarMonth(-1) }) {
-                            Icon(Icons.Default.ChevronLeft, contentDescription = "이전 달")
-                        }
-
-                        Text(
-                            text = "${viewDate.year}년 ${viewDate.monthValue}월",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-
-                        IconButton(onClick = { viewModel.updateCalendarMonth(1) }) {
-                            Icon(Icons.Default.ChevronRight, contentDescription = "다음 달")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // --- 캘린더 그리드 ---
-                    MonthCalendarGrid(
-                        year = viewDate.year,
-                        month = viewDate.monthValue,
-                        calendarDays = calendarData,
-                        onDayClick = onDateClick)
-                }
+            LaunchedEffect(Unit) {
+                viewModel.loadMorePastMonths()
             }
         }
     }
 }
+
 
 // 4. 삭제 확인 다이얼로그 (커스텀 디자인)
 @Composable
@@ -528,10 +548,11 @@ fun DeleteConfirmDialog(
                 Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
 
                 // 삭제 버튼 (빨간색)
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onConfirm() }
-                    .padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onConfirm() }
+                        .padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
                     Text(
                         text = "${count}장의 사진 삭제", // 혹은 "종료하기" 처럼 고정 텍스트
                         color = Color(0xFFFF3B30), fontWeight = FontWeight.Bold, fontSize = 16.sp
@@ -541,10 +562,11 @@ fun DeleteConfirmDialog(
                 Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
 
                 // 취소 버튼
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onDismiss() }
-                    .padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDismiss() }
+                        .padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
                     Text("취소", color = Color.Black, fontSize = 16.sp)
                 }
             }
@@ -649,10 +671,11 @@ fun QuestionListView(
                 LaunchedEffect(Unit) { loadMore() }
             }
 
-            Column(modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onQuestionClick(index, item) }
-                .padding(horizontal = 20.dp, vertical = 24.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onQuestionClick(index, item) }
+                    .padding(horizontal = 20.dp, vertical = 24.dp)) {
                 Row(verticalAlignment = Alignment.Top) {
                     // 질문 번호 (서버에서 준 questionNumber 활용)
                     Text(
@@ -776,7 +799,9 @@ fun QuestionDetailScreen(
             } else {
                 // 사진 영역
                 Card(
-                    modifier = Modifier.padding(20.dp).weight(1f),
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .weight(1f),
                     shape = RoundedCornerShape(24.dp)
                 ) {
                     Column(
@@ -1272,7 +1297,8 @@ fun DetailListWrapper(
                 horizontalArrangement = Arrangement.Center
             ) {
                 repeat(items.size) { iteration ->
-                    val color = if (pagerState.currentPage == iteration) Color.Black else Color.LightGray
+                    val color =
+                        if (pagerState.currentPage == iteration) Color.Black else Color.LightGray
                     Box(
                         modifier = Modifier
                             .padding(4.dp)
@@ -1379,7 +1405,9 @@ fun DetailCardItem(data: QuestionDetailResponse) {
                 )
 
                 // [배경 딤 처리] 블러 이미지를 살짝 어둡게 (선택사항)
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)))
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.2f)))
 
                 // [중앙 원본] 25% ~ 75% 영역 (weight 0.5 : 1 : 0.5)
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -1432,7 +1460,11 @@ fun PhotoSection(info: UserAnswerInfo, isTop: Boolean) {
             Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Text(text = info.name, color = Color.White, fontWeight = FontWeight.Bold)
-                Text(text = info.answeredAt ?: "", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                Text(
+                    text = info.answeredAt ?: "",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 12.sp
+                )
             }
         }
 
@@ -1461,3 +1493,70 @@ fun EmptyPhotoPlaceholder(text: String) {
         Text(text, color = Color.Gray)
     }
 }
+
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun CalendarMonthCard(
+    yearMonth: YearMonth,
+    calendarDays: List<CalendarDayInfo>,
+    onDayClick: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
+        // 2. 카드 영역
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // 스크린샷은 그림자가 거의 없어 보임
+        ) {
+            Column(modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp)) {
+
+                Text(
+                    text = "${yearMonth.year}년 ${yearMonth.monthValue}월",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black, // 혹은 디자인에 맞는 색상
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    textAlign = TextAlign.Center
+                )
+
+                // 요일 헤더 (일 월 화 수 목 금 토)
+                DayOfWeekHeader()
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 날짜 그리드
+                MonthCalendarGrid(
+                    year = yearMonth.year,
+                    month = yearMonth.monthValue,
+                    calendarDays = calendarDays,
+                    onDayClick = onDayClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DayOfWeekHeader() {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        val days = listOf("일", "월", "화", "수", "목", "금", "토")
+        days.forEach { day ->
+            Text(
+                text = day,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+        }
+    }
+}
+
+

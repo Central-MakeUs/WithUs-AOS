@@ -10,8 +10,8 @@ data class CoupleQuestionResponse(
 data class CoupleQuestionData(
     val coupleQuestionId: Long?,
     val question: String,
-    val myInfo: UserAnswerInfo,
-    val partnerInfo: UserAnswerInfo,
+    val myInfo: UserAnswerInfo?,
+    val partnerInfo: UserAnswerInfo?,
     val date: LocalDate = LocalDate.now()
 )
 

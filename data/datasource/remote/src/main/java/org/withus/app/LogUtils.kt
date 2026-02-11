@@ -3,7 +3,7 @@ package org.withus.app
 import android.util.Log
 import kotlin.run
 
-private const val TAG = "KoiOcrModule"
+private const val TAG = "WithUs"
 
 private val isEnableLogging = true
 

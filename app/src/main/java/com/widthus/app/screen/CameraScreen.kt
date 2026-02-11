@@ -40,14 +40,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.draw
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -69,6 +73,7 @@ import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.withus.app.debug
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -97,16 +102,15 @@ fun PhotoEditorScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // [수정 1] Picture 제거하고 GraphicsLayer 생성
+    val graphicsLayer = rememberGraphicsLayer()
+
     val stickers = remember { mutableStateListOf<StickerData>() }
     var isMenuVisible by remember { mutableStateOf(false) }
     var showTextInput by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) } // 저장 중 상태
-
-    // [추가 기능] 삭제할 스티커 상태 관리
+    var isSaving by remember { mutableStateOf(false) }
     var stickerToDelete by remember { mutableStateOf<StickerData?>(null) }
-
-    // [추가 기능] 화면 캡처를 위한 Picture 객체
-    val picture = remember { Picture() }
 
     val onTextComplete = { text: String ->
         if (text.isNotEmpty()) {
@@ -115,28 +119,35 @@ fun PhotoEditorScreen(
         showTextInput = false
     }
 
-    // [추가 기능] 이미지 저장 로직
+    // [수정 2] 저장 로직 변경 (Picture -> GraphicsLayer)
     fun saveCompositeImage() {
         if (isSent || isSaving) return
+
         isSaving = true
         scope.launch(Dispatchers.Default) {
-            // Picture를 Bitmap으로 변환
-            val bitmap = createBitmapFromPicture(picture)
-            // 갤러리에 저장
-            val savedUri = saveBitmapToGallery(context, bitmap)
+            try {
+                // Compose Bitmap -> Android Bitmap 변환
+                // (import androidx.compose.ui.graphics.asAndroidBitmap 필요)
+                val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
 
-            withContext(Dispatchers.Main) {
-                isSaving = false
-                if (savedUri != null) {
-                    Toast.makeText(context, "이미지가 전송되었습니다!", Toast.LENGTH_SHORT).show()
-                    onSendCompleteWithUri(savedUri)
-                } else {
-                    Toast.makeText(context, "이미지 저장 실패", Toast.LENGTH_SHORT).show()
+                val savedUri = saveBitmapToGallery(context, bitmap)
+
+                withContext(Dispatchers.Main) {
+                    isSaving = false
+                    if (savedUri != null) {
+                        onSendCompleteWithUri(savedUri)
+                    } else {
+                        Toast.makeText(context, "이미지 생성 실패", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    isSaving = false
+                    Toast.makeText(context, "에러 발생: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
-
 
     Box(
         modifier = Modifier
@@ -146,48 +157,33 @@ fun PhotoEditorScreen(
             .navigationBarsPadding()
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // 상단 바
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(onClick = {
-
-                }) { Icon(Icons.Default.Close, null, tint = Color.White) }
-                IconButton(onClick = {
-                    saveCompositeImage()
-                }) { Icon(Icons.Default.Download, null, tint = Color.White) }
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, null, tint = Color.White)
+                }
+                IconButton(onClick = { saveCompositeImage() }) {
+                    Icon(Icons.Default.Download, null, tint = Color.White)
+                }
             }
 
-            // --- 이미지 및 스티커 영역 (캡처 대상) ---
+            // --- [수정 3] 이미지 및 스티커 영역 (캡처 대상) ---
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .drawWithCache {
-                        val width = this.size.width.toInt()
-                        val height = this.size.height.toInt()
-
-                        onDrawWithContent {
-                            // 1. 네이티브 Canvas를 얻습니다 (android.graphics.Canvas)
-                            val nativeCanvas = picture.beginRecording(width, height)
-
-                            // 2. .asComposeCanvas()를 사용하여 Compose용 Canvas로 변환합니다.
-                            // import androidx.compose.ui.graphics.nativeCanvas 가 필요할 수 있습니다.
-                            val composeCanvas = androidx.compose.ui.graphics.Canvas(nativeCanvas)
-
-                            // 3. 변환된 Canvas를 사용하여 그립니다.
-                            draw(this, this.layoutDirection, composeCanvas, this.size) {
-                                this@onDrawWithContent.drawContent()
-                            }
-
-                            picture.endRecording()
-
-                            // 화면에도 정상적으로 내용을 출력합니다.
-                            drawContent()
+                    // [핵심] drawWithCache 제거 -> drawWithContent + record 사용
+                    .drawWithContent {
+                        graphicsLayer.record {
+                            this@drawWithContent.drawContent()
                         }
+                        drawLayer(graphicsLayer)
                     }
                     .clip(RoundedCornerShape(32.dp))
                     .background(Color.DarkGray)
@@ -211,46 +207,39 @@ fun PhotoEditorScreen(
                             DraggableSticker(
                                 data = sticker,
                                 onDrag = { dragAmount ->
-                                    // [지난번 수정 사항] 현재 리스트 값을 참조하여 업데이트
                                     val currentSticker = stickers[index]
                                     stickers[index] = currentSticker.copy(
                                         offsetX = currentSticker.offsetX + dragAmount.x,
                                         offsetY = currentSticker.offsetY + dragAmount.y
                                     )
                                 },
-                                // [추가 기능] 삭제 요청 콜백 연결
                                 onDeleteRequest = { stickerToDelete = sticker }
                             )
                         }
                     }
                 }
 
-                // 저장 중 로딩 표시
                 if (isSaving) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(color = Color.White)
                     }
                 }
 
-                // 전송 완료 아이콘
-//                if (isSent) {
-//                    Box(
-//                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)),
-//                        contentAlignment = Alignment.Center
-//                    ) {
-//                        Icon(
-//                            imageVector = Icons.Default.CheckCircle,
-//                            contentDescription = null,
-//                            tint = Color(0xFFFF4B4B),
-//                            modifier = Modifier.size(120.dp)
-//                        )
-//                    }
-//                }
+                if (isSent) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color.White, modifier = Modifier.size(80.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("전송 완료!", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
             // 하단 컨트롤 바
@@ -265,7 +254,6 @@ fun PhotoEditorScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                 }
                 Button(
-                    // [변경] 클릭 시 저장 로직 실행
                     onClick = { saveCompositeImage() },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4B4B)),
                     shape = CircleShape,
@@ -576,6 +564,7 @@ fun PhotoFlowScreen(
                 isSent = false, // 초기값
                 onClose = { capturedUri = null }, // 편집 취소 시 카메라로 이동
                 onSendCompleteWithUri = { uri ->
+                    debug("onSendCompleteWithUri : uri ")
                     // [핵심] 저장 완료 시 부모에게 Uri 전달
                     onFinish(uri)
                 }
@@ -708,9 +697,21 @@ fun fetchLocation(context: Context, onResult: (String) -> Unit) {
                             location.longitude,
                             1
                         ) { addresses ->
-                            val address = addresses.firstOrNull()
-                            val city = address?.subLocality ?: address?.locality ?: "알 수 없는 곳"
-                            onResult(city)
+                            val address = addresses.firstOrNull() ?: return@getFromLocation onResult("위치 정보 없음")
+                            // 1. 전체 주소 (예: 서울특별시 강남구 역삼동 123-4)
+                            val fullAddress = address.getAddressLine(0)
+
+                            // 2. 구성 요소별 조합 (필요한 부분만 골라 쓰세요)
+                            val city = address.locality ?: ""               // 시 (예: 서울특별시)
+                            val district = address.subLocality ?: ""         // 구 (예: 강남구)
+                            val dong = address.thoroughfare ?: ""            // 동/도로명 (예: 역삼동)
+                            val feature = address.featureName ?: ""          // 건물 번호/지번 (예: 737)
+
+                            // 결과 조합 예시: "강남구 역삼동"
+                            val detailedLocation = listOf(district, dong).filter { it.isNotBlank() }.joinToString(" ")
+
+                            onResult(detailedLocation.ifBlank { "알 수 없는 위치" })
+
                         }
                     } else {
                         @Suppress("DEPRECATION")

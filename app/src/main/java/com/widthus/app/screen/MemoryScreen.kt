@@ -163,7 +163,7 @@ fun MemoryScreen(
                 Text("추억", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(20.dp))
                 ManualCreateBanner(
-                    onClick = onCreateClick, nickName = LocalUserNickname.current.nickname, LocalPartnerNickname.current.nickname
+                    onClick = onCreateClick, nickName = LocalUserNickname.current.nickname.text, LocalPartnerNickname.current.nickname.text
                 )
                 Spacer(modifier = Modifier.height(30.dp))
                 MonthSelector(viewModel.currentMonth) { showSheet = true }

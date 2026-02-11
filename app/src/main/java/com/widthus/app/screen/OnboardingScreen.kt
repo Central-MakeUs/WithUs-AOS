@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +32,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -196,11 +203,15 @@ fun OnboardingScreen(
 @Composable
 fun LoginScreen(
     onKakaoLogin: () -> Unit,
-    onGoogleLogin: () -> Unit
+    onGoogleLogin: () -> Unit,
+    onTempLogin: () -> Unit // 이스터에그 동작용 콜백 추가
 ) {
-    Scaffold(
-        containerColor = Color.White
-    ) { paddingValues ->
+    // 클릭 횟수를 기억하기 위한 상태
+    var clickCount by remember { mutableIntStateOf(0) }
+    // 마지막 클릭 시간을 저장 (너무 천천히 누르면 무효화하기 위함)
+    var lastClickTime by remember { mutableLongStateOf(0L) }
+
+    Scaffold(containerColor = Color.White) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -208,15 +219,35 @@ fun LoginScreen(
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1. 상단 로고 영역
             Spacer(modifier = Modifier.height(80.dp))
 
+            // 1. 상단 로고 (여기에 이스터에그 심기)
             Text(
                 text = "WITHÜS",
                 fontSize = 42.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp,
-                color = Color.Black
+                color = Color.Black,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null // 클릭 시 시각적 효과 제거 (비밀스럽게)
+                    ) {
+                        val currentTime = System.currentTimeMillis()
+                        // 1초 이내에 다시 클릭하면 카운트 증가
+                        if (currentTime - lastClickTime < 1000) {
+                            clickCount++
+                        } else {
+                            clickCount = 1
+                        }
+                        lastClickTime = currentTime
+
+                        if (clickCount >= 3) { // 5번 연속 클릭 시
+                            onTempLogin()
+                            clickCount = 0 // 초기화
+                        }
+                    }
             )
 
             // 중간 빈 공간을 밀어내기 위해 weight 사용
@@ -240,7 +271,7 @@ fun LoginScreen(
                 Text(
                     text = "사진으로 이어지는,\n우리 둘만의 기록",
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Normal,
                     lineHeight = 40.sp,
                     color = Color.Black
                 )

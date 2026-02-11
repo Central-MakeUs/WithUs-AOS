@@ -13,6 +13,16 @@ data class CoupleKeyword(
     @SerializedName("content") val content: String
 )
 
+data class KeywordEditItem(
+    @SerializedName("keywordId") val keywordId: Int,
+    @SerializedName("content") val content: String,
+    @SerializedName("isSelected") val isSelected: Boolean
+)
+
+data class KeywordEditResponse(
+    val keywords: List<KeywordEditItem>
+)
+
 // 2. 전체 키워드 조회용 모델 (/api/keywords)
 data class KeywordsData(
     @SerializedName("keywordInfoList") val keywordInfoList: List<KeywordInfo>
@@ -34,10 +44,9 @@ data class KeywordUpdateRequest(
     @SerializedName("defaultKeywordIds")
     val defaultKeywordIds: List<Long>,
 
-    // 서버가 문자열 형태의 리스트("['A', 'B']")를 원하므로 String으로 선언
+    // String이 아니라 List<String>으로 변경하세요!
     @SerializedName("customKeywords")
-    val customKeywords: String
+    val customKeywords: List<String>
 )
-
 
 data class DailyImageRequest(val imageKey: String)

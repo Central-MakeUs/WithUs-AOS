@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.withus.app.debug
 import org.withus.app.model.ApiException
 import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.PresignedUrlRequest
@@ -69,17 +70,21 @@ class AuthViewModel @Inject constructor(
 
     var jwtToken = String()
 
-    var currentUserInfo by mutableStateOf(UserInfo("Me"))
+    var currentUserInfo by mutableStateOf(UserInfo(nickname = TextFieldValue("Me")))
         private set
 
-    var partnerUserInfo by mutableStateOf(UserInfo("Partner")) // 파트너 이름
+    var partnerUserInfo by mutableStateOf(UserInfo(nickname = TextFieldValue("Partner")))
         private set
 
     var partnerBirthdayValue by mutableStateOf(TextFieldValue("1998.05.12"))
-    var partnerProfileUri by mutableStateOf<Uri?>(null)
 
-    fun updateNickname(input: String) {
-        currentUserInfo = currentUserInfo.copy(nickname = input)    }
+    fun updateNickname(input: TextFieldValue) {
+        currentUserInfo = currentUserInfo.copy(nickname = input)
+    }
+
+    fun updateProfileUrl(url: Uri) {
+        currentUserInfo = currentUserInfo.copy(selectedLocalUri = url)
+    }
 
     var isDisconnectSuccess by mutableStateOf(false)
         private set
@@ -134,7 +139,7 @@ class AuthViewModel @Inject constructor(
 
             // 2. 요청 객체 생성
             val request = ProfileUpdateRequest(
-                nickname = currentUserInfo.nickname,
+                nickname = currentUserInfo.nickname.text,
                 birthday = formattedBirthday,
                 imageKey = imageKey
             )
@@ -145,8 +150,9 @@ class AuthViewModel @Inject constructor(
                 val updatedData = response.body()?.data
                 if (updatedData != null) {
                     // 수정된 정보를 다시 상태값에 동기화
-                    currentUserInfo = currentUserInfo.copy(nickname =  updatedData.nickname)
-
+                    currentUserInfo = currentUserInfo.copy(
+                        nickname = TextFieldValue(updatedData.nickname)
+                    )
                     ProfileLoadResult.Success
                 } else {
                     ProfileLoadResult.Error("응답 데이터가 비어있습니다.")
@@ -194,6 +200,27 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    suspend fun handleTempLogin(tempId: String = "testUser"): Boolean {
+        return try {
+            val fcmToken = getFcmToken() ?: "test_fcm_token"
+
+            val response = apiService.loginTemp(id = tempId, fcmToken = fcmToken)
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                val loginData = response.body()?.data
+                loginData?.let {
+                    tokenManager.saveAccessToken(it.jwt)
+                    // 성공 시 처리 로직 (Home 이동 등)
+                    return true
+                }
+            }
+            false
+        } catch (e: Exception) {
+            Log.e("EasterEgg", "임시 로그인 실패: ${e.message}")
+            false
+        }
+    }
+
     suspend fun getUserProfile(): ProfileLoadResult {
         Log.d("UserProfile", "getUserProfile 시작")
         return try {
@@ -208,7 +235,7 @@ class AuthViewModel @Inject constructor(
 
                     if (profileData != null) {
                         // --- 1. UI 상태 변수 업데이트 ---
-                        currentUserInfo = currentUserInfo.copy(profileData.nickname)
+                        currentUserInfo = currentUserInfo.copy(nickname = TextFieldValue(profileData.nickname))
 
                         val pureBirthdayDigits = profileData.birthday.replace("-", "")
                         birthdayValue = TextFieldValue(
@@ -231,7 +258,7 @@ class AuthViewModel @Inject constructor(
             } else {
                 // HTTP 에러 (4xx, 5xx)
                 Log.d("PROFILE", "프로필 데이터 없음 (온보딩 이동)")
-                ProfileLoadResult.Error("HTTP 에러")
+                ProfileLoadResult.Success
 
 //                val errorBody = response.errorBody()?.string()
 //                Log.e("PROFILE", "HTTP 에러: $errorBody")
@@ -249,22 +276,25 @@ class AuthViewModel @Inject constructor(
             _loading.value = true
             try {
                 // 1) 이미지 업로드(있다면)
-                val imageKey: String? = currentUserInfo.profileUrl?.let { uri ->
-                    // uploadImageAndGetKey returns Result<String>
-                    profileRepository.uploadImageAndGetKey(uri).getOrElse { throwable ->
-                        // 업로드 실패 시 예외 던지거나 null로 처리
-                        // 여기서는 에러로 처리
-                        throw throwable
+                val imageKey: String? = when {
+                    // 새 이미지를 선택한 경우 -> S3 업로드 후 새로운 key 획득
+                    currentUserInfo.selectedLocalUri != null -> {
+                        profileRepository.uploadImageAndGetKey(currentUserInfo.selectedLocalUri!!)
+                            .getOrElse { throw it }
+                    }
+                    else -> {
+                        currentUserInfo.serverProfileUrl
                     }
                 }
-
+                debug("imageKey : $imageKey")
                 // 2) 프로필 요청 생성
                 val formattedBirthday = formatBirthday(birthdayValue.text)
                 val request = ProfileUpdateRequest(
-                    nickname = currentUserInfo.nickname,
+                    nickname = currentUserInfo.nickname.text,
                     birthday = formattedBirthday,
                     imageKey = imageKey
                 )
+                debug("updateUserProfile : $request")
 
                 // 3) 서버에 업데이트
                 profileRepository.updateUserProfile(request).fold(
@@ -273,6 +303,8 @@ class AuthViewModel @Inject constructor(
                         _profileUpdated.emit(Unit)
                     },
                     onFailure = { throwable ->
+                        debug("updateUserProfile : $throwable")
+
                         throw throwable
                     }
                 )
@@ -291,7 +323,7 @@ class AuthViewModel @Inject constructor(
 
     suspend fun uploadProfileAndSave(isUpdate: Boolean): ProfileLoadResult {
         return try {
-            val currentUri = currentUserInfo.profileUrl ?: return ProfileLoadResult.Error("이미지가 선택되지 않았습니다.")
+            val currentUri = currentUserInfo.selectedLocalUri ?: return ProfileLoadResult.Error("이미지가 선택되지 않았습니다.")
             val contentType = context.contentResolver.getType(currentUri) ?: "image/jpeg"
 
             // 단계 1: Pre-signed URL 발급 받기
@@ -356,6 +388,7 @@ class AuthViewModel @Inject constructor(
     }
 
     fun terminateCouple() {
+        debug("terminateCouple !")
         viewModelScope.launch {
             coupleRepository.terminateCouple()
                 .onSuccess {
@@ -378,14 +411,13 @@ class AuthViewModel @Inject constructor(
                     if (body?.success == true && body.data != null) {
                         val profileData = body.data
 
-                        // [중후한 업데이트] copy()를 사용해 불변성 유지하며 상태 갱신
                         currentUserInfo = currentUserInfo.copy(
-                            nickname = profileData?.meProfile!!.nickname,
-                            profileUrl = profileData.meProfile.profileImageUrl?.let { Uri.parse(it) } ?: Uri.EMPTY                        )
+                            nickname = TextFieldValue(profileData?.meProfile!!.nickname),
+                            serverProfileUrl = profileData.meProfile.profileImageUrl)
 
                         partnerUserInfo = partnerUserInfo.copy(
-                            nickname = profileData.partnerProfile.nickname,
-                            profileUrl = profileData.partnerProfile.profileImageUrl?.let { Uri.parse(it) } ?: Uri.EMPTY                        )
+                            nickname = TextFieldValue(profileData.partnerProfile.nickname),
+                            serverProfileUrl = profileData.partnerProfile.profileImageUrl)
 
                         Log.d("AuthViewModel", "프로필 갱신 완료: ${currentUserInfo.nickname}")
                     }

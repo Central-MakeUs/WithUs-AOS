@@ -17,12 +17,21 @@ import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
@@ -45,6 +54,7 @@ import com.widthus.app.viewmodel.AuthViewModel
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
 import kotlinx.coroutines.launch
+import org.withus.app.debug
 
 sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
@@ -72,7 +82,8 @@ sealed class Screen(val route: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
-                  authViewModel: AuthViewModel = hiltViewModel()) {
+                  authViewModel: AuthViewModel = hiltViewModel()
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -80,14 +91,17 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
     // 3. 미디어 매니저 (최상위 공유)
     val mediaManager = rememberImageMediaManager()
 
+    var showTempLoginDialog by remember { mutableStateOf(false) }
+    var tempIdInput by remember { mutableStateOf("bin1") }
+
     CompositionLocalProvider(LocalUserNickname provides authViewModel.currentUserInfo,
         LocalPartnerNickname provides authViewModel.partnerUserInfo
     ) {
         NavHost(
             navController = navController,
 //        startDestination = Screen.Onboarding.route
-//        startDestination = Screen.Login.route
-            startDestination = Screen.Home.route
+        startDestination = Screen.Login.route
+//            startDestination = Screen.Home.route
 //        startDestination = Screen.Gallery.route
 //        startDestination = Screen.PhotoFlow.route
         ) {
@@ -143,7 +157,8 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                                                     authViewModel.handleKakaoLogin(accToken.accessToken)
                                                 if (isSuccess) {
 
-                                                    when (val result = authViewModel.getUserProfile()) {
+                                                    when (val result =
+                                                        authViewModel.getUserProfile()) {
                                                         is ProfileLoadResult.Success -> {
                                                             viewModel.navigateToNextScreenBasedOnStatus(
                                                                 navController
@@ -179,7 +194,8 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                             } else if (token != null) {
                                 Log.i("TAG", "로그인 성공 ${token.accessToken}")
                                 coroutineScope.launch {
-                                    val isSuccess = authViewModel.handleKakaoLogin(token.accessToken)
+                                    val isSuccess =
+                                        authViewModel.handleKakaoLogin(token.accessToken)
                                     if (isSuccess) {
 
                                         when (val result = authViewModel.getUserProfile()) {
@@ -202,7 +218,8 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                                             else -> {}
                                         }
                                     } else {
-                                        Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT)
+                                            .show()
                                     }
                                 }
                             }
@@ -210,6 +227,39 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                     },
                     onGoogleLogin = {
                         navController.navigate(Screen.StepInput.route)
+                    },
+                    onTempLogin = {
+                        coroutineScope.launch {
+                            showTempLoginDialog = true/*
+                            val isSuccess = authViewModel.handleTempLogin(
+                                "bin1"
+                            )
+                            if (isSuccess) {
+                                when (val result = authViewModel.getUserProfile()) {
+                                    is ProfileLoadResult.Success -> {
+                                        viewModel.navigateToNextScreenBasedOnStatus(
+                                            navController
+                                        )
+                                    }
+
+                                    is ProfileLoadResult.Error -> {
+                                        // 에러 메시지 토스트나 스낵바 표시
+                                        Toast.makeText(
+                                            context,
+                                            "로그인 실패: ${result.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+
+                                    }
+
+                                    else -> {}
+                                }
+                            } else {
+                                Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT)
+                                    .show()
+                            }
+
+                        */}
                     }
                 )
             }
@@ -237,7 +287,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
 
             composable(Screen.OnboardingConnect.route) {
                 OnboardingConnectScreen(
-                    nickname = authViewModel.currentUserInfo.nickname,
+                    nickname = authViewModel.currentUserInfo.nickname.text,
                     onInviteClick = {
                         navController.navigate(Screen.Invite.route) },
                     onEnterCodeClick = { navController.navigate(Screen.EnterCode.route) },
@@ -309,21 +359,28 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
 
             composable(Screen.ConnectConfirm.route) {
                 ConnectConfirmScreen(
+                    previewData = viewModel.joinPreviewData,
                     onConfirmClick = {
                         coroutineScope.launch { it
-                            viewModel.joinCouple(it)
+                            viewModel.joinCouple(it).onSuccess {
+                                authViewModel.fetchCoupleProfile()
+                                navController.navigate(Screen.ConnectComplete.route)
+                            }.onFailure {
+
+                            }
                         }
-                        navController.navigate(Screen.ConnectComplete.route)
                     },
-                    onLaterClick = {},
-                    navController
+                    onLaterClick = {
+                        navController.popBackStack()
+                    },
                 )
             }
 
             composable(Screen.ConnectComplete.route) {
                 ConnectCompleteScreen(
-                    viewModel = viewModel,
-                    onStartClick = {},
+                    onStartClick = {
+                        navController.navigate(Screen.Home.route)
+                    },
                 )
             }
 
@@ -336,14 +393,13 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                     onNextClick = {
                         navController.popBackStack()
                     },
-                    isMyPage = viewModel.isOnboardingComplete
                 )
             }
 
             composable(Screen.Invite.route) {
                 InviteScreen(
                     onBack = {
-                        if (authViewModel.currentUserInfo.nickname.isNotEmpty()) {
+                        if (authViewModel.currentUserInfo.nickname.text.isNotEmpty()) {
                             navController.navigate(Screen.OnboardingConnect.route)
                         }
                     },
@@ -358,8 +414,9 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                         coroutineScope.launch {
                             viewModel.previewJoinCouple(code)
                                 .onSuccess { preview ->
+                                    debug("preview : $preview")
                                     // 성공 시
-                                    navController.currentBackStackEntry?.savedStateHandle?.set("join_preview", preview)
+                                    viewModel.joinPreviewData = preview
                                     navController.navigate(Screen.ConnectConfirm.route)
 
                                     // 성공 콜백 호출 (에러 없음)
@@ -393,6 +450,66 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                 DayUsScreen()
             }
         }
+
+        if (showTempLoginDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showTempLoginDialog = false
+                    tempIdInput = "" // 닫을 때 초기화
+                },
+                title = { Text("임시 로그인") },
+                text = {
+                    Column {
+                        Text("사용할 아이디를 입력해주세요.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextField(
+                            value = tempIdInput,
+                            onValueChange = { tempIdInput = it },
+                            placeholder = { Text("bin1") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (tempIdInput.isNotBlank()) {
+                                showTempLoginDialog = false
+                                // [핵심] 입력받은 아이디로 로그인 시도
+                                coroutineScope.launch {
+                                    val isSuccess = authViewModel.handleTempLogin(tempIdInput)
+                                    if (isSuccess) {
+                                        when (val result = authViewModel.getUserProfile()) {
+                                            is ProfileLoadResult.Success -> {
+                                                viewModel.navigateToNextScreenBasedOnStatus(navController)
+                                            }
+                                            is ProfileLoadResult.Error -> {
+                                                Toast.makeText(context, "로그인 실패: ${result.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                            else -> {}
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
+                                    }
+                                    tempIdInput = "" // 완료 후 초기화
+                                }
+                            }
+                        }
+                    ) {
+                        Text("로그인")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showTempLoginDialog = false
+                        tempIdInput = ""
+                    }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -407,7 +524,7 @@ fun MainScreen(
     mediaManager: ImageMediaManager
 ) {
     // 1. 네비게이션 상태
-    var currentRoute by remember { mutableStateOf(BottomNavItem.Home.route) }
+    val currentRoute by viewModel.currentBottomRoute.collectAsState()
 
     // 2. 에디터(네컷 만들기) 화면 표시 여부 - true면 바텀바 숨김
     var isEditorOpen by remember { mutableStateOf(false) }
@@ -432,7 +549,7 @@ fun MainScreen(
             bottomBar = {
                 MainBottomNavigationBar(
                     currentRoute = currentRoute,
-                    onItemSelected = { item -> currentRoute = item.route }
+                    onItemSelected = { item -> viewModel.updateRoute(item.route)}
                 )
             }
         ) { paddingValues ->
@@ -442,8 +559,6 @@ fun MainScreen(
                         HomeScreen(
                             viewModel = viewModel,
                             mediaManager = mediaManager,
-                            myKeywords = listOf("음식", "여행", "일상"),
-//                            myKeywords = listOf(),
                             onNavigateToKeywordSelect = {
                                 navController.navigate(Screen.KeywordSelect.route)
                             }
@@ -452,14 +567,6 @@ fun MainScreen(
 
                     BottomNavItem.Memory.route -> {
                         MemoryArchiveScreen(mainViewModel = viewModel, mediaManager = mediaManager)
-//                        // 새로 만든 갤러리 화면 연결
-//                        FourCutGalleryScreen(
-//                            savedImages = savedFourCuts,
-//                            onCreateClick = { isEditorOpen = true }, // 만들기 버튼 클릭
-//                            onDeleteRequest = { urisToDelete ->
-//                                savedFourCuts.removeAll(urisToDelete)
-//                            }
-//                        )
                     }
 
                     BottomNavItem.Gallery.route -> {
@@ -473,6 +580,12 @@ fun MainScreen(
                             mediaManager = mediaManager,
                             onNavigateToEditKeyword = {
                                 navController.navigate(Screen.KeywordSelect.route)
+                            },
+                            onLogoutSuccess = {
+                                navController.navigate(Screen.Login.route)
+                            },
+                            onWithdraw = {
+                                navController.navigate(Screen.Login.route)
                             }
                         )
                     }

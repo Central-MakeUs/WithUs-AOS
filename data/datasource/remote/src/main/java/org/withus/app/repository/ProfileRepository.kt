@@ -27,7 +27,6 @@ class ProfileRepository @Inject constructor(
 
     suspend fun uploadImageAndGetKey(imageUri: Uri): Result<String> = runCatching {
         // 1) 파일명과 contentType 추출 (간단히 파일명 생성)
-        val fileName = "profile_${System.currentTimeMillis()}.jpg"
         val contentType = app.contentResolver.getType(imageUri) ?: "image/jpeg"
 
         // 2) presigned url 요청
