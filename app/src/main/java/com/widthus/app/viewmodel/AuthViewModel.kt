@@ -100,6 +100,7 @@ class AuthViewModel @Inject constructor(
     var birthdayValue by mutableStateOf(TextFieldValue("")) // String 대신 TextFieldValue 사용
         private set
 
+    var joinDate = ""
 
     fun logout() {
         viewModelScope.launch {
@@ -242,6 +243,9 @@ class AuthViewModel @Inject constructor(
                             text = pureBirthdayDigits,
                             selection = TextRange(pureBirthdayDigits.length)
                         )
+
+                        joinDate = profileData.joinDate
+
                         fetchCoupleProfile()
 
                         Log.d("PROFILE", "프로필 로드 성공 (홈 이동)")

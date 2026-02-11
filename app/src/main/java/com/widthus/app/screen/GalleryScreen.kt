@@ -66,6 +66,7 @@ import coil.compose.AsyncImage
 import com.widthus.app.model.GridItem
 import com.widthus.app.model.MemorySet
 import com.widthus.app.model.QuestionAnswer
+import com.widthus.app.utils.Utils.shareImage
 import com.widthus.app.viewmodel.MainViewModel
 import com.withus.app.R
 import kotlinx.coroutines.launch
@@ -348,7 +349,7 @@ fun ToggleOption(text: String, isSelected: Boolean, onClick: () -> Unit) {
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun LatestGridView(
-    items: List<Pair<String, ArchiveUserAnswerInfo>>, // ViewModel 타입과 일치시킴
+    items: List<Pair<String, ArchiveUserAnswerInfo>>,
     isSelectionMode: Boolean,
     selectedIds: List<Long>,
     onToggleSelect: (Long) -> Unit,
@@ -613,6 +614,7 @@ fun MonthCalendarGrid(
                                 // 썸네일 결정 (나의 사진 우선, 없으면 파트너 사진)
                                 val thumbnailUrl =
                                     dayData.meImageThumbnailUrl ?: dayData.partnerImageThumbnailUrl
+                                debug("thumbnailUrl : $thumbnailUrl")
 
                                 Box(
                                     modifier = Modifier
@@ -745,10 +747,11 @@ fun QuestionDetailScreen(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
         }, bottomBar = {
-            QuestionDetailBottomBar(onShare = {
+            QuestionDetailBottomBar(
+                onShare = {
                 scope.launch {
                     val bitmap = graphicsLayer.toImageBitmap()
-//                        shareImage(context, bitmap)
+                    shareImage(context, bitmap)
                 }
             }, onInstagram = {
                 scope.launch {
@@ -858,176 +861,6 @@ fun DetailPhotoSection(info: UserAnswerInfo, modifier: Modifier) {
         }
 
         // 만약 서버에서 '답변 텍스트'가 추가된다면 여기에 말풍선을 넣으세요!
-    }
-}
-
-@Composable
-fun PhotoSection(
-    answer: QuestionAnswer, modifier: Modifier = Modifier
-) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        // 배경 이미지
-        AsyncImage(
-            model = answer.imageUrl,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
-        // 이름 & 시간 레이어 (좌측 상단)
-        Row(
-            modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.5f))
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = answer.userName,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(text = answer.time, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
-            }
-        }
-
-        // 중앙 하단 말풍선
-        Surface(
-            color = Color.Black.copy(alpha = 0.6f),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp)
-        ) {
-            Text(
-                text = answer.comment,
-                color = Color.White,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun PhotoSection(
-    userName: String, time: String, imageUrl: String, comment: String, modifier: Modifier = Modifier
-) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        // 배경 이미지
-        AsyncImage(
-            model = imageUrl,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
-        // 상단 정보 (이름, 시간)
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .align(Alignment.TopStart),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .background(Color.White.copy(alpha = 0.3f), CircleShape)
-            ) // 아바타
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = userName,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(text = time, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
-            }
-        }
-
-        // 말풍선 코멘트 (중앙 하단)
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp),
-            color = Color.Black.copy(alpha = 0.6f),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text(
-                text = comment,
-                color = Color.White,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun AnswerItemCard(answer: QuestionAnswer) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-    ) {
-        // 사용자 정보 (아바타, 이름, 시간)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFEEEEEE)) // 프로필 이미지 없을 때 배경
-            ) {
-                // AsyncImage(model = answer.profileImageUrl, ...)
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(text = answer.userName, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(text = answer.time, fontSize = 12.sp, color = Color.Gray)
-            }
-        }
-
-        // 이미지 및 말풍선 오버레이
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f) // 스크린샷 비율에 맞춰 조정
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFF0F0F0))
-        ) {
-            // 실제 이미지 (Coil 사용)
-            AsyncImage(
-                model = answer.imageUrl,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-
-            // ✅ 말풍선 스타일 코멘트 (중앙 하단 배치)
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp),
-                color = Color.Black.copy(alpha = 0.7f),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = answer.comment,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-        }
     }
 }
 
@@ -1558,5 +1391,3 @@ fun DayOfWeekHeader() {
         }
     }
 }
-
-

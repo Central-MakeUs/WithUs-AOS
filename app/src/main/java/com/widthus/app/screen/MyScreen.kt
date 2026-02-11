@@ -81,7 +81,7 @@ fun MyScreenEntry(
                     navController.navigate(MyRoute.ProfileEdit.route)
                 },
                 onNavigateToEditKeyword = onNavigateToEditKeyword,
-                viewModel = viewModel
+                joinDate = authViewModel.joinDate
             )
         }
         // 2. 계정 관리 화면
@@ -180,14 +180,14 @@ fun MyScreenEntry(
 // =================================================================
 @Composable
 fun MyMainScreen(
-    viewModel: MainViewModel,
     nickName: String,
     onNavigateToAccount: () -> Unit,
     onNavigateToConnectInfo: () -> Unit,
     onEditProfile: () -> Unit,
     onNavigateToEditKeyword: () -> Unit,
-    mediaManager: ImageMediaManager
-) {
+    mediaManager: ImageMediaManager,
+    joinDate: String,
+    ) {
 
     val context = LocalContext.current
 
@@ -227,7 +227,7 @@ fun MyMainScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(nickName, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("${viewModel.joinDate} 가입", fontSize = 14.sp, color = Color.Gray)
+                    Text("$joinDate 가입", fontSize = 14.sp, color = Color.Gray)
                 }
                 OutlinedButton(
                     onClick = {

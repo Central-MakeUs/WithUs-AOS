@@ -3,6 +3,8 @@ package com.widthus.app.service
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -11,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.widthus.app.MainActivity
+import com.widthus.app.widget.MyWithUsWidget
 import com.withus.app.R
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -38,12 +41,30 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        // 메시지에 알림 데이터가 포함되어 있는지 확인
+        // 1. 일반 알림 띄우기
         remoteMessage.notification?.let {
             showNotification(it.title ?: "WithUs", it.body ?: "")
         }
+
+        // 2. 위젯 갱신 로직 추가
+        // 만약 FCM 데이터에 사진 URL이 포함되어 있다면 가져옵니다.
+        val imageUrl = remoteMessage.data["imageUrl"]
+        val title = remoteMessage.data["title"]
+        updateWidget(imageUrl, title)
     }
 
+    private fun updateWidget(imageUrl: String?, title: String?) {
+        val intent = Intent(this, MyWithUsWidget::class.java).apply {
+            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+            // 현재 설치된 모든 위젯의 ID를 가져와서 갱신하도록 설정
+            val ids = AppWidgetManager.getInstance(application)
+                .getAppWidgetIds(ComponentName(application, MyWithUsWidget::class.java))
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+            putExtra("EXTRA_IMAGE_URL", imageUrl) // 위젯으로 이미지 URL 전달
+            putExtra("EXTRA_IMAGE_TITLE", title) // 위젯으로 이미지 URL 전달
+        }
+        sendBroadcast(intent)
+    }
     private fun showNotification(title: String, message: String) {
         val channelId = "withus_default_channel"
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

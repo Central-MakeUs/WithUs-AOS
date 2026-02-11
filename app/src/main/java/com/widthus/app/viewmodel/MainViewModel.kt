@@ -1,6 +1,9 @@
 package com.widthus.app.viewmodel
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
@@ -17,6 +20,7 @@ import com.widthus.app.model.OnboardingPage
 import com.widthus.app.screen.BottomNavItem
 import com.widthus.app.screen.Screen
 import com.widthus.app.utils.PreferenceManager
+import com.widthus.app.widget.MyWithUsWidget
 import com.withus.app.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -114,9 +118,6 @@ class MainViewModel @Inject constructor(
 
     private val _memorySets = mutableStateListOf<CoupleQuestionData>()
     val memorySets: List<CoupleQuestionData> = _memorySets
-
-    // 가입 날짜 todo
-    val joinDate = "2024년 10월 6일"
 
     var isConnect = false
 
@@ -401,7 +402,6 @@ class MainViewModel @Inject constructor(
     // 직접 추가한 키워드를 UI 목록에 반영하는 함수
     fun addCustomKeywordToDisplay(newKeyword: String) {
         val current = _defaultKeywords.value.toMutableList()
-        // todo key word 추가
         current.add(KeywordInfo(
             keywordId = 0,
             content = newKeyword,
@@ -451,9 +451,31 @@ class MainViewModel @Inject constructor(
                 val response = apiService.getTodayQuestion()
                 if (response.isSuccessful) {
                     questionData = response.body()?.data
+
+                    questionData?.let { data ->
+                        data.partnerInfo?.questionImageUrl?.let {
+                            updateMyWidget(context, data.question, it)
+                        }
+                    }
                 }
             } catch (e: Exception) { /* 에러 처리 */ }
         }
+    }
+
+    private fun updateMyWidget(context: Context, title: String, uri: String) {
+        val intent = Intent(context, MyWithUsWidget::class.java).apply {
+            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+
+            // 위젯에 전달할 데이터 담기
+            putExtra("EXTRA_QUESTION", title)
+            // 프로필 이미지를 위젯 배경으로 쓰고 싶다면 (예: 본인 정보)
+            putExtra("EXTRA_IMAGE_URL", uri)
+
+            val ids = AppWidgetManager.getInstance(context)
+                .getAppWidgetIds(ComponentName(context, MyWithUsWidget::class.java))
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+        }
+        context.sendBroadcast(intent)
     }
 
     // 2. 사진 서버 업로드 함수
@@ -483,8 +505,17 @@ class MainViewModel @Inject constructor(
     fun fetchDailyKeywordData(coupleKeywordId: Long) {
         viewModelScope.launch {
             dailyRepository.getTodayDaily(coupleKeywordId)
-                .onSuccess { keywordDailyData = it }
+                .onSuccess {
+                    keywordDailyData = it
+
+                    keywordDailyData?.let { data ->
+                        data.partnerInfo?.questionImageUrl?.let { imageUrl ->
+                            updateMyWidget(context, data.question, imageUrl)
+                        }
+                    }
+                }
         }
+
     }
 
     // 오늘의 일상 사진 업로드

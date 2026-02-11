@@ -48,13 +48,20 @@ data class QuestionDetailResponse(
 
 // 상세 페이지용 아이템 모델 (명세서의 "selected" 반영)
 data class ArchiveDetailItem(
-    val archiveType: String, // "QUESTION" 또는 "CUSTOM"
-    val id: Long,            // 식별용 ID
-    val selected: Boolean,   // 서버가 true/false로 내려줌
-    val questionNumber: Int?,
-    val questionContent: String?,
-    val myInfo: UserAnswerInfo?,      // 내가 답변 안했으면 null
-    val partnerInfo: UserAnswerInfo?  // 상대가 답변 안했으면 null
+    val archiveType: String,
+    val id: Long,
+    val question: String?,
+    val myInfo: UserAnswerInfo?,
+    val partnerInfo: UserAnswerInfo?,
+    val selected: Boolean,
+)
+
+data class UserArchiveInfo(
+    val userId: Long,
+    val name: String,
+    val profileThumbnailImageUrl: String,
+    val answerImageUrl: String?,
+    val answeredAt: String?
 )
 
 data class ArchiveDetailResponse(
