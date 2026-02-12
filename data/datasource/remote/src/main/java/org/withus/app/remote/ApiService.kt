@@ -31,6 +31,8 @@ import org.withus.app.model.request.LoginRequest
 import org.withus.app.model.request.LogoutRequest
 import org.withus.app.model.request.PresignedUrlRequest
 import org.withus.app.model.request.ProfileUpdateRequest
+import org.withus.app.model.request.RefreshRequest
+import org.withus.app.model.request.RefreshResponse
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -65,7 +67,6 @@ interface ApiService {
     @POST("/api/auth/temp/token/{id}")
     suspend fun loginTemp(
         @Path("id") id: String,
-        @Query("fcmToken") fcmToken: String
     ): Response<CommonResponse<LoginResponse>>
 
     @GET("/api/me/user/profile")
@@ -213,5 +214,10 @@ interface ApiService {
 
     @GET("/api/me/couple/profile")
     suspend fun getCoupleProfile(): Response<CommonResponse<CoupleProfileResponse>>
+
+    @POST("/api/auth/refresh")
+    suspend fun refresh(
+        @Body refreshRequest: RefreshRequest
+    ): Response<CommonResponse<RefreshResponse>>
 
 }

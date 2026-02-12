@@ -82,7 +82,7 @@ class AuthViewModel @Inject constructor(
         currentUserInfo = currentUserInfo.copy(nickname = input)
     }
 
-    fun updateProfileUrl(url: Uri) {
+    fun updateProfileUrl(url: Uri?) {
         currentUserInfo = currentUserInfo.copy(selectedLocalUri = url)
     }
 
@@ -129,7 +129,7 @@ class AuthViewModel @Inject constructor(
     }
 
 
-    suspend fun updateUserProfile(imageKey: String?, isUpdate: Boolean): ProfileLoadResult {
+    suspend fun uploadUserProfile(imageKey: String): ProfileLoadResult {
         return try {
             val rawBirthday = birthdayValue.text
             val formattedBirthday = if (rawBirthday.length == 8) {
@@ -142,18 +142,24 @@ class AuthViewModel @Inject constructor(
             val request = ProfileUpdateRequest(
                 nickname = currentUserInfo.nickname.text,
                 birthday = formattedBirthday,
-                imageKey = imageKey
+                imageKey = imageKey,
+                isImageUpdated = false,
             )
 
-            val response = if (isUpdate) apiService.updateUserProfile(request) else apiService.uploadUserProfile(request)
+            val response = apiService.uploadUserProfile(request)
 
             if (response.isSuccessful && response.body()?.success == true) {
                 val updatedData = response.body()?.data
                 if (updatedData != null) {
                     // 수정된 정보를 다시 상태값에 동기화
                     currentUserInfo = currentUserInfo.copy(
-                        nickname = TextFieldValue(updatedData.nickname)
+                        nickname = TextFieldValue(updatedData.nickname),
+                        serverProfileUrl = updatedData.profileImageUrl,
+                        selectedLocalUri = null,
+                        birthday = updatedData.birthday,
                     )
+                    updateProfileUrl(null)
+
                     ProfileLoadResult.Success
                 } else {
                     ProfileLoadResult.Error("응답 데이터가 비어있습니다.")
@@ -182,11 +188,12 @@ class AuthViewModel @Inject constructor(
             // 3. 응답 처리
             if (response.isSuccessful && response.body()?.success == true) {
                 val serverToken = response.body()?.data?.jwt
+                val refreshToken = response.body()?.data?.refreshToken
                 Log.d("LOGIN", "서버 로그인 성공: $serverToken")
 
-                if (serverToken != null) {
+                if (serverToken != null && refreshToken != null) {
                     jwtToken = serverToken
-                    tokenManager.saveAccessToken(serverToken)
+                    tokenManager.saveAccessToken(serverToken, refreshToken)
                     true
                 } else {
                     false
@@ -205,12 +212,12 @@ class AuthViewModel @Inject constructor(
         return try {
             val fcmToken = getFcmToken() ?: "test_fcm_token"
 
-            val response = apiService.loginTemp(id = tempId, fcmToken = fcmToken)
+            val response = apiService.loginTemp(id = tempId, /*fcmToken = fcmToken*/)
 
             if (response.isSuccessful && response.body()?.success == true) {
                 val loginData = response.body()?.data
                 loginData?.let {
-                    tokenManager.saveAccessToken(it.jwt)
+                    tokenManager.saveAccessToken(it.jwt, it.refreshToken)
                     // 성공 시 처리 로직 (Home 이동 등)
                     return true
                 }
@@ -287,17 +294,21 @@ class AuthViewModel @Inject constructor(
                             .getOrElse { throw it }
                     }
                     else -> {
-                        currentUserInfo.serverProfileUrl
+                         null
                     }
                 }
                 debug("imageKey : $imageKey")
+                val isImageUpdated = imageKey != null
+
                 // 2) 프로필 요청 생성
                 val formattedBirthday = formatBirthday(birthdayValue.text)
                 val request = ProfileUpdateRequest(
                     nickname = currentUserInfo.nickname.text,
                     birthday = formattedBirthday,
+                    isImageUpdated = isImageUpdated,
                     imageKey = imageKey
                 )
+
                 debug("updateUserProfile : $request")
 
                 // 3) 서버에 업데이트
@@ -305,6 +316,7 @@ class AuthViewModel @Inject constructor(
                     onSuccess = {
                         // 성공 처리: UI에 알림(예: 닫기, 토스트, 리프레시)
                         _profileUpdated.emit(Unit)
+                        updateProfileUrl(null)
                     },
                     onFailure = { throwable ->
                         debug("updateUserProfile : $throwable")
@@ -325,7 +337,7 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    suspend fun uploadProfileAndSave(isUpdate: Boolean): ProfileLoadResult {
+    suspend fun uploadProfileAndSave(): ProfileLoadResult {
         return try {
             val currentUri = currentUserInfo.selectedLocalUri ?: return ProfileLoadResult.Error("이미지가 선택되지 않았습니다.")
             val contentType = context.contentResolver.getType(currentUri) ?: "image/jpeg"
@@ -352,7 +364,7 @@ class AuthViewModel @Inject constructor(
             }
 
             // 단계 3: 성공한 imageKey를 담아 프로필 수정 API 호출
-            updateUserProfile(imageKey, isUpdate)
+            uploadUserProfile(imageKey)
 
         } catch (e: Exception) {
             Log.e("UPLOAD", "전체 프로세스 오류", e)

@@ -39,6 +39,7 @@ import androidx.navigation.compose.rememberNavController
 import com.widthus.app.viewmodel.AuthViewModel
 import com.widthus.app.viewmodel.MainViewModel
 import androidx.core.net.toUri
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.widthus.app.model.LocalPartnerNickname
 import com.widthus.app.viewmodel.UiState
@@ -807,7 +808,7 @@ fun LogoutConfirmDialog(onDismiss: () -> Unit, onLogout: () -> Unit) {
 @Composable
 fun ProfileEditScreen(
     viewModel: AuthViewModel,
-    mode: EditMode, // ✅ 모드 추가
+    mode: EditMode,
     onBack: () -> Unit,
     onNavigateToDisconnect: () -> Unit,
     mediaManager: ImageMediaManager,
@@ -844,9 +845,12 @@ fun ProfileEditScreen(
         if (mode == EditMode.ME) viewModel.currentUserInfo else viewModel.partnerUserInfo
     val birthdayValue =
         if (mode == EditMode.ME) viewModel.birthdayValue else viewModel.partnerBirthdayValue
-    val profileUri =
-        if (mode == EditMode.ME) viewModel.currentUserInfo.serverProfileUrl else viewModel.partnerUserInfo.serverProfileUrl
 
+    val currentUserInfo = if (mode == EditMode.ME) viewModel.currentUserInfo else viewModel.partnerUserInfo
+
+    val profileUri = currentUserInfo.selectedLocalUri ?: currentUserInfo.serverProfileUrl?.toUri()
+
+    debug("profileUri: $profileUri, serverProfileUrl: ${currentUserInfo.serverProfileUrl}, selectedLocalUri: ${currentUserInfo.selectedLocalUri}")
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -874,7 +878,7 @@ fun ProfileEditScreen(
             Spacer(modifier = Modifier.height(30.dp))
 
             ProfileImagePicker(
-                uri = profileUri?.toUri(),
+                uri = profileUri,
                 onImageClick = { if (mode == EditMode.ME) showSheet = true })
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -950,16 +954,14 @@ fun ProfileEditScreen(
                 onDismiss = { showSheet = false },
                 onCameraClick = {
                     mediaManager.launchCamera {
-                        viewModel.currentUserInfo.copy(
-                            selectedLocalUri = it
-                        )
+                        showSheet = false
+                        viewModel.updateProfileUrl(it)
                     }
                 },
                 onGalleryClick = {
                     mediaManager.launchGallery {
-                        viewModel.currentUserInfo.copy(
-                            selectedLocalUri = it
-                        )
+                        showSheet = false
+                        viewModel.updateProfileUrl(it)
                     }
                 },
             )

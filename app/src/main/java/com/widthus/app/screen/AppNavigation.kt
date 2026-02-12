@@ -271,7 +271,7 @@ fun AppNavigation(viewModel: MainViewModel = hiltViewModel(),
                     onAllFinish = {
                         /*navController.navigate(Screen.OnboardingConnect.route)*/
                         coroutineScope.launch {
-                            when (authViewModel.uploadProfileAndSave(false)) {
+                            when (authViewModel.uploadProfileAndSave()) {
                                 ProfileLoadResult.Success -> {
                                     viewModel.navigateToNextScreenBasedOnStatus(navController)
                                 }

@@ -23,11 +23,15 @@ class TokenManager @Inject constructor(
 
     companion object {
         private val ACCESS_TOKEN = stringPreferencesKey("access_token")
+        private val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
         private val FCM_TOKEN = stringPreferencesKey("fcm_token")
     }
 
     private val _token = MutableStateFlow<String?>(null)
     val token: StateFlow<String?> = _token.asStateFlow()
+
+    private val _reRefreshToken = MutableStateFlow<String?>(null)
+    val reRefreshToken: StateFlow<String?> = _token.asStateFlow()
 
     private val _fcmToken = MutableStateFlow<String?>(null)
     val fcmToken: StateFlow<String?> = _fcmToken.asStateFlow()
@@ -38,16 +42,22 @@ class TokenManager @Inject constructor(
         }
 
         CoroutineScope(Dispatchers.IO).launch {
+            dataStore.data.map { it[REFRESH_TOKEN] }.collect { _reRefreshToken.value = it }
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
             dataStore.data.map { it[FCM_TOKEN] }.collect { _fcmToken.value = it }
         }
     }
 
     fun getAccessTokenSync(): String? = _token.value
 
-    suspend fun saveAccessToken(token: String) {
-        dataStore.edit { it[ACCESS_TOKEN] = token }
-    }
+    fun getRefreshTokenSync(): String? = reRefreshToken.value
 
+    suspend fun saveAccessToken(token: String, refreshToken: String) {
+        dataStore.edit { it[ACCESS_TOKEN] = token }
+        dataStore.edit { it[REFRESH_TOKEN] = refreshToken }
+    }
 
     suspend fun deleteAccessToken() {
         dataStore.edit { it.remove(ACCESS_TOKEN) }

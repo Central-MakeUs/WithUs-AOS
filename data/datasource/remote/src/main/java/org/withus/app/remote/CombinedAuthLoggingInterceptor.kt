@@ -1,6 +1,7 @@
 package org.withus.app.remote
 
 
+import com.google.gson.Gson
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
@@ -12,6 +13,8 @@ import org.withus.app.debug
 import org.withus.app.token.TokenManager
 import org.withus.app.di.NetworkModule.BASE_URL
 import org.withus.app.errorLog
+import org.withus.app.model.CommonResponse
+import org.withus.app.model.request.RefreshRequest
 import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,7 +22,8 @@ import javax.inject.Singleton
 @Singleton
 class CombinedAuthLoggingInterceptor @Inject constructor(
     private val tokenManager: TokenManager,
-    private val networkLoadingManager: NetworkLoadingManager // 주입 추가
+    private val networkLoadingManager: NetworkLoadingManager,
+    private val apiService: dagger.Lazy<ApiService>,
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -27,56 +31,68 @@ class CombinedAuthLoggingInterceptor @Inject constructor(
         networkLoadingManager.showLoading()
 
         return try {
-
             val originalRequest = chain.request()
             val originalUrl = originalRequest.url
 
-            // 1. 외부 URL(S3 등)인지 체크
+            // 1. 외부 URL(S3 등) 체크 및 처리
             if (originalUrl.host.contains("amazonaws.com")) {
-                debug("외부 URL 요청 감지: S3 업로드를 진행합니다.")
-
-                // S3로 보낼 때는 내 서버의 Bearer 토큰 헤더를 제거해야 합니다. (인증 충돌 방지)
                 val s3Request = originalRequest.newBuilder()
                     .removeHeader("Authorization")
                     .build()
-
                 return chain.proceed(s3Request)
             }
 
-            // 2. 내 서버 API 요청인 경우에만 Base URL 교체 로직 적용
-            val newBaseUrl = BASE_URL
-            val httpUrl = newBaseUrl.toHttpUrlOrNull()
+            // 2. Base URL 및 기존 토큰 추가
+            val httpUrl = BASE_URL.toHttpUrlOrNull()
+            val initialRequest = originalRequest.newBuilder().apply {
+                if (httpUrl != null) {
+                    url(
+                        originalUrl.newBuilder()
+                            .scheme(httpUrl.scheme)
+                            .host(httpUrl.host)
+                            .port(httpUrl.port)
+                            .build()
+                    )
+                }
+                val token = runBlocking { tokenManager.getAccessTokenSync() }
+                if (!token.isNullOrBlank()) {
+                    header("Authorization", "Bearer $token")
+                }
+            }.build()
 
-            val finalRequest = if (httpUrl != null) {
-                val newUrl = originalUrl.newBuilder()
-                    .scheme(httpUrl.scheme)
-                    .host(httpUrl.host)
-                    .port(httpUrl.port)
-                    .build()
-
-                originalRequest.newBuilder().url(newUrl).build()
-            } else {
-                originalRequest
-            }
-
-            val path = finalRequest.url.encodedPath
-
-            // 3. 토큰 추가 로직 (재빌드)
-            val authAddedBuilder = finalRequest.newBuilder()
-            val token = runBlocking {
-                tokenManager.getAccessTokenSync()
-            }
-            if (!token.isNullOrBlank()) {
-                authAddedBuilder.header("Authorization", "Bearer $token")
-            }
-
-            val request = authAddedBuilder.build()
-
-            // 5. 로깅 및 실행
-            logRequest(request)
-            val response = chain.proceed(request)
+            logRequest(initialRequest)
+            var response = chain.proceed(initialRequest)
 
             logResponse(response)
+
+            // 3. 토큰 만료 에러 체크 (EXPIRED_JWT_TOKEN)
+            if (isTokenExpired(response)) {
+                debug("토큰 만료 감지 (EXPIRED_JWT_TOKEN): 갱신을 시도합니다.")
+
+                // 4. 새로운 토큰 받아오기 (동기적 실행)
+                val newToken = runBlocking {
+                    refreshAccessToken()
+                }
+
+                if (newToken != null) {
+                    // 기존 response 닫기 (메모리 누수 방지)
+                    response.close()
+
+                    // 5. 새 토큰으로 기존 요청 재시도
+                    val retryRequest = initialRequest.newBuilder()
+                        .header("Authorization", "Bearer $newToken")
+                        .build()
+
+                    debug("토큰 갱신 성공: 재요청을 보냅니다.")
+                    response = chain.proceed(retryRequest)
+                } else {
+                    // 토큰 갱신 실패 (로그아웃 처리 등 필요)
+                    debug("토큰 갱신 실패: 로그인이 필요합니다.")
+                }
+            }
+
+            response
+
 
         } catch (e: Exception) {
             errorLog("API Request Failed", e)
@@ -142,4 +158,43 @@ class CombinedAuthLoggingInterceptor @Inject constructor(
                 contentType.contains("video/", ignoreCase = true) ||
                 contentType.contains("multipart/", ignoreCase = true)
     }
+
+    /**
+     * Response Body를 파싱하여 에러 코드가 EXPIRED_JWT_TOKEN인지 확인
+     */
+    private fun isTokenExpired(response: Response): Boolean {
+        if (response.isSuccessful) return false
+
+        return try {
+            val source = response.peekBody(Long.MAX_VALUE).source()
+            val bodyString = source.buffer.clone().readUtf8()
+            val commonResponse = Gson().fromJson(bodyString, CommonResponse::class.java)
+            commonResponse?.error?.code == "EXPIRED_JWT_TOKEN"
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Refresh API를 호출하여 토큰을 갱신하고 저장
+     */
+    private suspend fun refreshAccessToken(): String? {
+        return try {
+            val refreshToken = tokenManager.getRefreshTokenSync() ?: return null
+
+            val refreshResponse = apiService.get().refresh(RefreshRequest(refreshToken))
+
+            if (refreshResponse.isSuccessful && refreshResponse.body()?.success == true) {
+                val newData = refreshResponse.body()?.data
+                if (newData != null) {
+                    tokenManager.saveAccessToken(newData.accessToken, newData.refreshToken)
+                    return newData.accessToken
+                }
+            }
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
 }
