@@ -55,7 +55,7 @@ class DailyRepository @Inject constructor(
 
     suspend fun uploadQuestionPhoto(coupleQuestionId: Long, imageUri: Uri): Result<Unit> = runCatching {
         // 1. S3 Pre-signed URL 요청 (카테고리는 MEMORY 또는 QUESTION 등 서버 명세에 맞춤)
-        val presignedResp = api.getPresignedUrl(PresignedUrlRequest("MEMORY"))
+        val presignedResp = api.getPresignedUrl(PresignedUrlRequest("ARCHIVE"))
         val presignedData = presignedResp.body()?.data ?: throw Exception("URL 발급 실패")
 
         // 2. S3에 실제 파일 업로드 (기존에 작성하신 로직 활용)

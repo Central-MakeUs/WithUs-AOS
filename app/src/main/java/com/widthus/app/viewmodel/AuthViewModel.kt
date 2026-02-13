@@ -212,7 +212,7 @@ class AuthViewModel @Inject constructor(
         return try {
             val fcmToken = getFcmToken() ?: "test_fcm_token"
 
-            val response = apiService.loginTemp(id = tempId, /*fcmToken = fcmToken*/)
+            val response = apiService.loginTemp(id = tempId, fcmToken = fcmToken)
 
             if (response.isSuccessful && response.body()?.success == true) {
                 val loginData = response.body()?.data

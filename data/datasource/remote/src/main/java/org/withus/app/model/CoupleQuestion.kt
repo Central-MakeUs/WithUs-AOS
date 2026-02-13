@@ -9,6 +9,7 @@ data class CoupleQuestionResponse(
 
 data class CoupleQuestionData(
     val coupleQuestionId: Long?,
+    val questionNumber: Long?,
     val question: String,
     val myInfo: UserAnswerInfo?,
     val partnerInfo: UserAnswerInfo?,

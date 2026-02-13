@@ -27,9 +27,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.withus.app.debug
 import org.withus.app.model.ApiException
@@ -78,6 +81,16 @@ class MainViewModel @Inject constructor(
 
     private val _selectedMainTab = MutableStateFlow("오늘의 질문")
     val selectedMainTab: StateFlow<String> = _selectedMainTab
+
+    val startDestination: StateFlow<String?> = preferenceManager.isOnboardingComplete
+        .map { isComplete ->
+            if (isComplete) Screen.Login.route else Screen.Onboarding.route
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
 
     fun updateMainTab(tab: String) {
         _selectedMainTab.value = tab
@@ -598,14 +611,9 @@ class MainViewModel @Inject constructor(
 
                     detailList = mappedList
 
-                    detailList = mappedList
-
                     // [중요] 서버 응답에 selected 필드가 있다면 그걸로 인덱스 찾기
                     val index = response.archiveInfoList.indexOfFirst { it.selected }
                     scrollIndex = if (index != -1) index else 0
-
-                    // 상세 데이터가 준비되었음을 알림 (기존 detailData 변수 업데이트)
-                    selectedQuestionDetail = mappedList.getOrNull(scrollIndex)
                 }
         }
     }
@@ -680,36 +688,24 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    var selectedQuestionDetail by mutableStateOf<QuestionDetailResponse?>(null)
-        private set
 
     fun fetchQuestionDetail(id: Long) {
         viewModelScope.launch {
             try {
                 val response = apiService.getQuestionArchiveDetail(id)
+
                 if (response.isSuccessful && response.body()?.success == true) {
-                    selectedQuestionDetail = response.body()?.data
+                    val data = response.body()?.data
+
+                    if (data != null) {
+                        detailList = listOf(data)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("API", "질문 상세 조회 실패", e)
             }
         }
     }
-
-    fun ArchiveDateGroup.toQuestionDetail(myId: Long): QuestionDetailResponse {
-        // imageInfoList에서 내 정보와 상대방 정보를 분리
-        val myInfo = this.imageInfoList.find { it.userId == myId }
-        val partnerInfo = this.imageInfoList.find { it.userId != myId }
-
-        return QuestionDetailResponse(
-            coupleQuestionId = 0L, // JSON에 ID가 없다면 임시값 또는 필드 추가 필요
-            questionNumber = 0L,   // JSON에 없다면 필드 추가 필요
-            questionContent = "질문 내용이 여기에 들어갑니다.", // API 응답에 맞게 수정
-            myInfo = myInfo,
-            partnerInfo = partnerInfo
-        )
-    }
-
     fun getCoupleKeyword() {
         viewModelScope.launch {
             when (val result = keywordRepository.getCoupleKeywords()) {

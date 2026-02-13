@@ -285,9 +285,9 @@ fun ManualCreateBanner(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
             .clickable { onClick() }, // 클릭 시 플로우 시작
-        shape = RoundedCornerShape(24.dp), color = Color(0xFF222222)
+        shape = RoundedCornerShape(16.dp), color = Color(0xFF222222)
     ) {
         Row(
             modifier = Modifier.padding(20.dp),

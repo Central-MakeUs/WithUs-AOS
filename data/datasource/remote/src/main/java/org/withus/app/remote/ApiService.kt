@@ -67,6 +67,7 @@ interface ApiService {
     @POST("/api/auth/temp/token/{id}")
     suspend fun loginTemp(
         @Path("id") id: String,
+        @Query("fcmToken") fcmToken: String,
     ): Response<CommonResponse<LoginResponse>>
 
     @GET("/api/me/user/profile")
@@ -82,7 +83,7 @@ interface ApiService {
         @Body profileRequest: ProfileUpdateRequest
     ): Response<CommonResponse<ProfileResponse>>
 
-    @POST("/api/me/status")
+    @GET("/api/me/status")
     suspend fun getUserStatus(): Response<CommonResponse<StatusData>>
 
     @POST("/api/me/couple/join")
@@ -143,7 +144,7 @@ interface ApiService {
     @GET("/api/me/couple/keywords/{coupleKeywordId}/today")
     suspend fun getTodayKeywords(
         @Path("coupleKeywordId") coupleKeywordId: Long
-    ): Response<CommonResponse<CoupleQuestionData>> // 응답 구조가 질문과 같으므로 모델 재사용
+    ): Response<CommonResponse<CoupleQuestionData>>
 
     // 2. 오늘의 일상 이미지 업로드 (ImageKey 전달)
     @POST("/api/me/couple/keywords/{coupleKeywordId}/today/image")

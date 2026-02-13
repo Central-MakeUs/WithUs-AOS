@@ -9,11 +9,17 @@
 
         <item name="colorPrimaryDark">@color/primaryDark</item>
         <item name="colorAccent">@color/accent</item>
-        <item name="android:windowBackground">@color/white</item>
 
         <!-- 메인 테마에서는 보통 상태바 색상을 앱의 브랜드 색상으로 설정합니다. -->
         <item name="android:statusBarColor" tools:targetApi="l">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
+
+        <item name="colorSurface">#F8F8F8</item>
+        <item name="android:windowBackground">#F8F8F8</item>
+
+        <item name="colorOnSurface">#000000</item>
+        <item name="colorSurfaceVariant">#F8F8F8</item>
+        <item name="colorOnSurfaceVariant">#1C1B1F</item>
     </style>
 
     <style name="Theme.App.Starting" parent="Theme.Material3.DayNight.NoActionBar">

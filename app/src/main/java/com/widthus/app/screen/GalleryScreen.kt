@@ -77,6 +77,8 @@ import org.withus.app.model.ArchiveUserAnswerInfo
 import org.withus.app.model.CalendarDayInfo
 import org.withus.app.model.QuestionDetailResponse
 import org.withus.app.model.UserAnswerInfo
+import org.withus.app.model.UserArchiveInfo
+import saveBitmapToGallery
 import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
@@ -120,11 +122,9 @@ fun GalleryScreen(
         }
     }
 
-    val detailData = viewModel.selectedQuestionDetail
-
     val detailDataList = viewModel.detailList // 리스트 전체를 가져옵니다
 
-    debug("selectedQuestionIndex : $selectedQuestionIndex")
+    debug("selectedQuestionIndex : $selectedQuestionIndex, detailDataList : ${detailDataList.joinToString()}")
 
     Box(
         modifier = Modifier
@@ -132,7 +132,7 @@ fun GalleryScreen(
             .background(Color.White)
     ) {
 
-        if (selectedQuestionIndex != null && detailData != null) {
+        if (selectedQuestionIndex != null && detailDataList.isNotEmpty()) {
             DetailListWrapper(
                 items = detailDataList,
                 initialIndex = viewModel.scrollIndex,
@@ -143,7 +143,8 @@ fun GalleryScreen(
                 onDelete = {
                     // 삭제 API 연결
                     showDeleteDialog = true
-                }
+                },
+                isQuestion = viewMode == ViewMode.QUESTION
             )
         } else {
             Box(
@@ -158,7 +159,8 @@ fun GalleryScreen(
                                 Text(
                                     text = "보관",
                                     fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 5.dp)
                                 )
                             },
                             actions = {
@@ -192,7 +194,8 @@ fun GalleryScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 16.dp),
+                                    .padding(bottom = 16.dp)
+                                    .padding(horizontal = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 ViewModeToggle(
@@ -202,30 +205,60 @@ fun GalleryScreen(
                     }
                 }, bottomBar = {
                     if (isSelectionMode) {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp)
-                                .navigationBarsPadding()
+                                .background(Color.White)
+                                .padding(horizontal = 20.dp, vertical = 10.dp)
+                                .navigationBarsPadding() // 네비게이션 바(제스처 바) 영역 확보
                         ) {
+                            // 1. 삭제하기 버튼
+                            val isAnySelected = selectedIds.isNotEmpty()
+
                             Button(
                                 onClick = { showDeleteDialog = true },
+                                enabled = isAnySelected, // 선택된 게 없으면 비활성화
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(
-                                        0xFFFFFF
-                                    )
+                                    // 선택되면 검은색, 아니면 연한 회색
+                                    containerColor = if (isAnySelected) Color.Black else Color(0xFFF3F3F3),
+                                    contentColor = if (isAnySelected) Color.White else Color(0xFFBDBDBD),
+                                    disabledContainerColor = Color(0xFFF3F3F3),
+                                    disabledContentColor = Color(0xFFBDBDBD)
                                 ),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(56.dp),
-                                enabled = selectedIds.isNotEmpty()
+                                    .height(56.dp)
                             ) {
                                 Text(
-                                    "${selectedIds.size}장의 사진 삭제하기",
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    text = if (isAnySelected) "${selectedIds.size}장의 사진 삭제하기" else "삭제하기",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if (isAnySelected) {
+                                // 2. 돌아가기 버튼 (텍스트 형태)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp) // 터치 영역 확보
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            isSelectionMode = false
+                                            selectedIds.clear()
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "돌아가기",
+                                        color = Color.Black,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     }
@@ -266,7 +299,7 @@ fun GalleryScreen(
                                                 viewModel.fetchDetailByDate(
                                                     date = date,
                                                     targetId = info.id,          // UserAnswerInfo에 id 필드가 있어야 함
-//                                            targetType = info. // UserAnswerInfo에 archiveType 필드가 있어야 함
+                                                    targetType = info.archiveType
                                                 )
 
                                                 // 3. 인덱스 설정 (이 값이 null이 아니게 되어 상세 화면이 뜸)
@@ -302,23 +335,27 @@ fun GalleryScreen(
                         }
                     }
                 }
-
-                // === 삭제 확인 다이얼로그 ===
-                if (showDeleteDialog) {
-                    DeleteConfirmDialog(
-                        count = selectedIds.size,
-                        onDismiss = { showDeleteDialog = false },
-                        onConfirm = {
-                            // 실제 삭제 로직 수행
-                            // viewModel.delete(selectedIds)
-                            showDeleteDialog = false
-                            isSelectionMode = false
-                            selectedIds.clear()
-                        })
-                }
             }
         }
+        if (showDeleteDialog) {
+            DeleteConfirmDialog(
+                count = if (selectedQuestionIndex != null) 1 else selectedIds.size,
+                onDismiss = { showDeleteDialog = false },
+                onConfirm = {
+                    // 삭제 로직 호출 (viewModel.delete...)
+                    showDeleteDialog = false
 
+                    if (selectedQuestionIndex != null) {
+                        // 상세 화면에서 삭제한 경우
+                        selectedQuestionIndex = null
+                    } else {
+                        // 리스트에서 삭제한 경우
+                        isSelectionMode = false
+                        selectedIds.clear()
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -327,18 +364,24 @@ fun GalleryScreen(
 // ====================================================================
 
 @Composable
-fun ToggleOption(text: String, isSelected: Boolean, onClick: () -> Unit) {
+fun ToggleOption(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier, // modifier를 받을 수 있게 추가
+    onClick: () -> Unit
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier // 여기서 weight 등의 modifier를 적용받음
             .clip(RoundedCornerShape(16.dp))
-            .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
+            .background(if (selected) Color.White else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center) {
+            .padding(vertical = 8.dp), // 상하 여백
+        contentAlignment = Alignment.Center // ★ 텍스트 중앙 정렬 필수
+    ) {
         Text(
             text = text,
-            color = if (isSelected) Color.White else Color.Gray,
-            fontWeight = FontWeight.Bold,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) Color.Black else Color.Gray,
             fontSize = 14.sp
         )
     }
@@ -359,7 +402,9 @@ fun LatestGridView(
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
-        modifier = Modifier.fillMaxSize().background(Color.White),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White),
         contentPadding = PaddingValues(1.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
         verticalArrangement = Arrangement.spacedBy(1.dp)
@@ -453,11 +498,20 @@ fun LatestGridView(
                                 color = if (isSelected) Color(0xFF222222) else Color.Transparent,
                                 shape = CircleShape
                             )
-                            .border(1.dp, if (isSelected) Color(0xFF222222) else Color.White, CircleShape),
+                            .border(
+                                1.dp,
+                                if (isSelected) Color(0xFF222222) else Color.White,
+                                CircleShape
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         if (isSelected) {
-                            Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                            Icon(
+                                Icons.Default.Check,
+                                null,
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
                         }
                     }
                 }
@@ -700,167 +754,37 @@ fun QuestionListView(
     }
 }
 
-// 5. 토글 버튼 업데이트 (3개 옵션)
 @Composable
 fun ViewModeToggle(
-    currentMode: ViewMode, onModeChanged: (ViewMode) -> Unit
+    currentMode: ViewMode,
+    onModeChanged: (ViewMode) -> Unit
 ) {
     Row(
         modifier = Modifier
+            .fillMaxWidth() // 1. 전체 너비 차지
             .background(Color(0xFFF5F5F5), RoundedCornerShape(20.dp))
-            .padding(4.dp)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween // 아이템 간 간격 균등 배치
     ) {
-        ToggleOption("최신순", currentMode == ViewMode.LATEST) { onModeChanged(ViewMode.LATEST) }
-        ToggleOption("캘린더", currentMode == ViewMode.CALENDAR) { onModeChanged(ViewMode.CALENDAR) }
-        ToggleOption("질문", currentMode == ViewMode.QUESTION) { onModeChanged(ViewMode.QUESTION) }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun QuestionDetailScreen(
-    data: QuestionDetailResponse, onBack: () -> Unit, onDelete: () -> Unit
-) {
-
-    val scope = rememberCoroutineScope() // 코루틴 스코프 생성
-    val graphicsLayer = rememberGraphicsLayer() // 캡처를 위한 레이어
-    val context = LocalContext.current
-
-    // 사진이 둘 다 없는 경우 체크
-    val isBothEmpty =
-        data.myInfo?.questionImageUrl == null && data.partnerInfo?.questionImageUrl == null
-
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("#${data.questionNumber}", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBackIosNew, contentDescription = "뒤로가기")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "삭제")
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
-            )
-        }, bottomBar = {
-            QuestionDetailBottomBar(
-                onShare = {
-                scope.launch {
-                    val bitmap = graphicsLayer.toImageBitmap()
-                    shareImage(context, bitmap)
-                }
-            }, onInstagram = {
-                scope.launch {
-                    val bitmap = graphicsLayer.toImageBitmap()
-                    shareToInstagram(context, bitmap)
-                }
-            }, onDownload = {
-                scope.launch {
-                    val bitmap = graphicsLayer.toImageBitmap()
-                    saveImageToGallery(context, bitmap)
-                }
-            })
-        }, containerColor = Color.White
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-                .drawWithContent {
-                    // 이 레이어에 현재 화면 내용을 기록합니다.
-                    graphicsLayer.record {
-                        this@drawWithContent.drawContent()
-                    }
-                    drawLayer(graphicsLayer)
-                },
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // 질문 내용
-            Text(
-                text = data.questionContent,
-                textAlign = TextAlign.Center,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 26.sp,
-                modifier = Modifier.padding(vertical = 32.dp, horizontal = 24.dp)
-            )
-
-            if (isBothEmpty) {
-                // 사진이 모두 없는 경우 (명세 반영)
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("삭제된 사진입니다.", color = Color.Gray)
-                }
-            } else {
-                // 사진 영역
-                Card(
-                    modifier = Modifier
-                        .padding(20.dp)
-                        .weight(1f),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Center // 답변이 하나일 때 중앙 정렬
-                    ) {
-                        data.myInfo?.let {
-                            DetailPhotoSection(info = it, modifier = Modifier.weight(1f))
-                        }
-                        data.partnerInfo?.let {
-                            DetailPhotoSection(info = it, modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun DetailPhotoSection(info: UserAnswerInfo, modifier: Modifier) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        // 배경: 답변 이미지 (questionImageUrl)
-        AsyncImage(
-            model = info.questionImageUrl,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+        // 2. 각 아이템에 weight(1f) 적용 -> 남은 공간을 1:1:1로 나눔
+        ToggleOption(
+            text = "최신순",
+            selected = currentMode == ViewMode.LATEST,
+            onClick = { onModeChanged(ViewMode.LATEST) },
+            modifier = Modifier.weight(1f)
         )
-
-        // 왼쪽 상단: 프로필과 이름/시간
-        Row(
-            modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = info.profileThumbnailImageUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(0.3f))
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = info.name,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(text = info.answeredAt ?: "", color = Color.White.copy(0.8f), fontSize = 11.sp)
-            }
-        }
-
-        // 만약 서버에서 '답변 텍스트'가 추가된다면 여기에 말풍선을 넣으세요!
+        ToggleOption(
+            text = "캘린더",
+            selected = currentMode == ViewMode.CALENDAR,
+            onClick = { onModeChanged(ViewMode.CALENDAR) },
+            modifier = Modifier.weight(1f)
+        )
+        ToggleOption(
+            text = "질문",
+            selected = currentMode == ViewMode.QUESTION,
+            onClick = { onModeChanged(ViewMode.QUESTION) },
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -973,31 +897,52 @@ private fun saveImageToGallery(context: Context, bitmap: ImageBitmap) {
     }
 }
 
-private fun shareToInstagram(context: Context, bitmap: ImageBitmap) {
-    val androidBitmap = bitmap.asAndroidBitmap()
+fun shareBitmap(context: Context, bitmap: Bitmap) {
+    val uri = saveBitmapToCache(context, bitmap) ?: return
 
-    // 1. 임시 파일 저장 (FileProvider 필요)
-    val file = File(context.cacheDir, "instagram_share.jpg")
-    FileOutputStream(file).use { out ->
-        androidBitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/*"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
+    context.startActivity(Intent.createChooser(intent, "공유하기"))
+}
 
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+private fun saveBitmapToCache(context: Context, bitmap: Bitmap): Uri? {
+    return try {
+        val cachePath = File(context.cacheDir, "images")
+        cachePath.mkdirs()
+        val stream = FileOutputStream("$cachePath/share_image.png")
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        stream.close()
 
-    // 2. 인스타그램 스토리 인텐트 설정
-    val intent = Intent("com.instagram.share.ADD_TO_STORY").apply {
-        type = "image/jpeg"
-        putExtra("interactive_asset_uri", uri)
-        putExtra("top_background_color", "#000000") // 배경색 커스텀
-        putExtra("bottom_background_color", "#000000")
+        val imagePath = File(context.cacheDir, "images")
+        val newFile = File(imagePath, "share_image.png")
+
+        // AndroidManifest.xml에 FileProvider 설정이 필요합니다.
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", newFile)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+
+fun shareToInstagram(context: Context, bitmap: Bitmap) {
+    val uri = saveBitmapToCache(context, bitmap) ?: return
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/*"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        setPackage("com.instagram.android") // 인스타그램 패키지 지정
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
-    // 3. 인스타그램 앱 실행
     try {
         context.startActivity(intent)
     } catch (e: Exception) {
-        Toast.makeText(context, "인스타그램 앱이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
+        // 인스타그램이 설치되어 있지 않은 경우 처리
+        Toast.makeText(context, "인스타그램이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1006,7 +951,8 @@ fun ArchiveEmptyView() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(vertical = 80.dp), // 하단 탭바 고려
+            .padding(vertical = 80.dp)
+            .background(Color(0xFFF8F8F8)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -1038,21 +984,30 @@ fun ArchiveEmptyView() {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class) // Pager 사용을 위해 필요
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DetailListWrapper(
     items: List<QuestionDetailResponse>,
     initialIndex: Int,
     onBack: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    isQuestion: Boolean
 ) {
-    // 1. Pager 상태 관리 (현재 몇 번째 페이지인지)
+
+    debug("DetailListWrapper : items :${items.joinToString()}")
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // 1. Pager 상태
     val pagerState = rememberPagerState(
         initialPage = initialIndex,
         pageCount = { items.size }
     )
 
-    // 현재 보고 있는 페이지의 데이터
+    // 2. 화면 캡처를 위한 GraphicsLayer 생성
+    // Compose 1.6+ 기능. 만약 낮은 버전이라면 dev.shreyaspatil.capturable 라이브러리 사용 권장
+    val graphicsLayer = rememberGraphicsLayer()
+
     val currentItem = items.getOrNull(pagerState.currentPage)
 
     Scaffold(
@@ -1061,8 +1016,14 @@ fun DetailListWrapper(
             // 상단: 뒤로가기 / 날짜 / 삭제 버튼
             CenterAlignedTopAppBar(
                 title = {
+                    val title = if (isQuestion) {
+                        "#${currentItem?.questionNumber?.toString()}"
+                    } else {
+                        currentItem?.myInfo?.answeredAt ?: ""
+                    }
+
                     Text(
-                        text = currentItem?.myInfo?.answeredAt ?: "", // 데이터에 날짜가 있다면 표시
+                        text = title,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -1074,19 +1035,39 @@ fun DetailListWrapper(
                 },
                 actions = {
                     IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "삭제")
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_trash),
+                            contentDescription = "",
+                            modifier = Modifier.size(24.dp),
+                            tint = Color.Black
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
         },
+
         bottomBar = {
-            // 하단: 공유/다운로드 버튼들 (스크린샷 하단 동그라미 버튼 3개)
-            // 기존 QuestionDetailBottomBar 사용하거나 직접 구현
             QuestionDetailBottomBar(
-                onShare = { /* 공유 로직 */ },
-                onInstagram = { /* 인스타 로직 */ },
-                onDownload = { /* 다운로드 로직 */ }
+                onShare = {
+                    scope.launch {
+                        // 비트맵 캡처 및 변환
+                        val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
+                        shareBitmap(context, bitmap)
+                    }
+                },
+                onInstagram = {
+                    scope.launch {
+                        val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
+                        shareToInstagram(context, bitmap)
+                    }
+                },
+                onDownload = {
+                    scope.launch {
+                        val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
+                        saveBitmapToGallery(context, bitmap)
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -1096,8 +1077,6 @@ fun DetailListWrapper(
                 .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-            // 2. 질문 제목 (예: "오운완")
             Spacer(modifier = Modifier.height(20.dp))
             Text(
                 text = currentItem?.questionContent ?: "",
@@ -1107,97 +1086,64 @@ fun DetailListWrapper(
             )
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 3. 가로 스와이프 페이저 (여기가 핵심!)
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
-                    .weight(1f) // 남은 공간 꽉 채우기
+                    .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 30.dp), // 양옆 살짝 보이게 (선택사항)
-                pageSpacing = 16.dp // 카드 사이 간격
+                contentPadding = PaddingValues(horizontal = 30.dp),
+                pageSpacing = 16.dp
             ) { page ->
-                // 각 페이지의 카드 내용
                 val itemData = items[page]
-                DetailCardItem(data = itemData)
-            }
 
+                // ★ 핵심: 현재 보고 있는 페이지만 GraphicsLayer에 기록하도록 설정
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            // 현재 페이지인 경우에만 drawWithContent로 캡처 레이어에 기록
+                            if (pagerState.currentPage == page) {
+                                Modifier.drawWithContent {
+                                    // 1. GraphicsLayer에 그리기 명령 기록
+                                    graphicsLayer.record {
+                                        this@drawWithContent.drawContent()
+                                    }
+                                    // 2. 실제 화면에 그리기
+                                    drawContent()
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
+                ) {
+                    DetailCardItem(data = itemData)
+                }
+            }
             // 4. 페이지 인디케이터 (점, 점, 점)
             Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier
-                    .height(20.dp)
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                repeat(items.size) { iteration ->
-                    val color =
-                        if (pagerState.currentPage == iteration) Color.Black else Color.LightGray
-                    Box(
-                        modifier = Modifier
-                            .padding(4.dp)
-                            .clip(CircleShape)
-                            .background(color)
-                            .size(8.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DetailListWrapper2(
-    items: List<QuestionDetailResponse>,
-    initialIndex: Int,
-    onBack: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val listState = rememberLazyListState()
-
-    // 데이터가 로드되면 해당 위치로 스크롤
-    LaunchedEffect(initialIndex) {
-        if (items.isNotEmpty()) {
-            listState.scrollToItem(initialIndex)
-        }
-    }
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("상세 조회", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBackIosNew, contentDescription = "뒤로가기")
+            if (items.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .height(20.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    repeat(items.size) { iteration ->
+                        val color =
+                            if (pagerState.currentPage == iteration) Color.Black else Color.LightGray
+                        Box(
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                                .size(8.dp)
+                        )
                     }
                 }
-            )
-        },
-    ) { paddingValues ->
-        // 2. 중요: Box나 Column으로 감싸고 반드시 fillMaxSize를 먼저 줍니다.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()           // 이 부분이 없으면 LazyColumn이 무한대 높이를 가지려 합니다.
-                .padding(paddingValues)  // Scaffold의 상단바 영역만큼 패딩 처리
-        ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(), // 3. 리스트도 꽉 채우기
-            ) {
-                items(items) { item ->
-                    // 상세 카드 레이아웃 (알맹이)
-                    QuestionDetailScreen(
-                        data = item,
-                        onBack = onBack,
-                        onDelete = onDelete
-                    )
-
-                    Spacer(modifier = Modifier.height(40.dp))
-                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
+
     }
 }
 
@@ -1208,10 +1154,11 @@ fun DetailCardItem(data: QuestionDetailResponse) {
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        val hasMyInfo = data.myInfo != null
-        val hasPartnerInfo = data.partnerInfo != null
+        val hasMyInfo = data.myInfo?.answerImageUrl != null
+        val hasPartnerInfo = data.partnerInfo?.answerImageUrl != null
         val singleInfo = data.myInfo ?: data.partnerInfo
 
+        debug("hasMyInfo : $hasMyInfo, hasPartnerInfo : $hasPartnerInfo, singleInfo : $singleInfo")
         Box(modifier = Modifier.fillMaxSize()) {
             if (hasMyInfo && hasPartnerInfo) {
                 // 1. 둘 다 있을 때: 기존처럼 50/50 배분
@@ -1229,7 +1176,7 @@ fun DetailCardItem(data: QuestionDetailResponse) {
 
                 // [배경] 전체 영역에 블러 처리된 이미지 배치
                 AsyncImage(
-                    model = singleInfo.questionImageUrl,
+                    model = singleInfo.answerImageUrl,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -1238,9 +1185,11 @@ fun DetailCardItem(data: QuestionDetailResponse) {
                 )
 
                 // [배경 딤 처리] 블러 이미지를 살짝 어둡게 (선택사항)
-                Box(modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.2f)))
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.2f))
+                )
 
                 // [중앙 원본] 25% ~ 75% 영역 (weight 0.5 : 1 : 0.5)
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -1263,11 +1212,11 @@ fun DetailCardItem(data: QuestionDetailResponse) {
 }
 
 @Composable
-fun PhotoSection(info: UserAnswerInfo, isTop: Boolean) {
+fun PhotoSection(info: UserArchiveInfo, isTop: Boolean) {
     Box(modifier = Modifier.fillMaxSize()) {
         // 배경 이미지
         AsyncImage(
-            model = info.questionImageUrl,
+            model = info.answerImageUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()

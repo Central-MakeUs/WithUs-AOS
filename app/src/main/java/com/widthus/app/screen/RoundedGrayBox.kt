@@ -88,7 +88,12 @@ import org.withus.app.debug
 import org.withus.app.model.CoupleQuestionData
 import org.withus.app.model.JoinCouplePreviewData
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import com.widthus.app.utils.BirthdayHintTransformation
 import org.withus.app.model.UserAnswerInfo
 
 enum class QuestionState {
@@ -133,7 +138,7 @@ fun StepInputScreen(
         2 -> {
             val digits = viewModel.birthdayValue.text.filter { it.isDigit() }
             // 8자리이면서 + 실제 유효한 날짜여야 true
-            digits.length == 8 && isValidDate(digits)
+            digits.length != 8 || isValidDate(digits)
         }
 
         else -> true
@@ -142,19 +147,49 @@ fun StepInputScreen(
     Scaffold(
         containerColor = Color.White,
         topBar = {
-            // 2단계나 4단계일 때 뒤로가기 버튼 표시
-            if (currentStep != 1) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 8.dp, top = 8.dp)
-                ) {
-                    IconButton(onClick = {
-                        currentStep = if (currentStep == 4) 2 else 1
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로가기", tint = Color.Black)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
+            ) {
+                // 1. 뒤로가기 버튼 (1단계가 아닐 때만 표시)
+                if (currentStep != 1) {
+                    IconButton(
+                        onClick = {
+                            currentStep = if (currentStep == 4) 2 else 1
+                        },
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    ) {
+                        Icon(painterResource(R.drawable.ic_arrow), contentDescription = "취소", tint = Color.Black)
                     }
                 }
+
+                // 2. 단계 표시 (1/3, 2/3, 3/3)
+                Text(
+                    text = buildAnnotatedString {
+                        // 현재 단계 강조 (빨간색)
+                        withStyle(style = SpanStyle(
+                            color = Color(0xFFE95053),
+                            fontWeight = FontWeight.Bold
+                        )
+                        ) {
+                            append(when(currentStep) {
+                                1 -> "1"
+                                2 -> "2"
+                                else -> "3"
+                            })
+                        }
+                        // 전체 단계
+                        withStyle(style = SpanStyle(color = Color.Gray)) {
+                            append(" / 3")
+                        }
+                    },
+                    fontSize = 16.sp,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 16.dp)
+                )
             }
         }
     ) { paddingValues ->
@@ -202,33 +237,28 @@ fun StepInputScreen(
                     else -> TextFieldValue("")
                 }
 
+                val birthdayMask = remember { BirthdayHintTransformation() }
+
                 OutlinedTextField(
                     value = textValue,
                     onValueChange = { newValue ->
-                        if (currentStep == 1) {
-                            // TextFieldValue를 통째로 넘겨야 조합 상태가 유지됩니다.
-                            viewModel.updateNickname(newValue)
-                        } else {
+                        // 숫자 8자리까지만 입력 가능하도록 제한
+                        val digits = newValue.text.filter { it.isDigit() }
+                        if (currentStep == 2 && digits.length <= 8) {
                             viewModel.updateBirthday(newValue)
+                        } else if (currentStep == 1) {
+                            viewModel.updateNickname(newValue)
                         }
                     },
                     textStyle = LocalTextStyle.current.copy(
-                        fontSize = 18.sp, textAlign = TextAlign.Center, color = Color.Black
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Center,
+                        color = Color.Black
                     ),
-                    placeholder = {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                if (currentStep == 1) "닉네임을 입력해주세요" else "YYYY-MM-DD",
-                                color = Color(0xFFC7C7C7),
-                                fontSize = 18.sp
-                            )
-                        }
-                    },
-                    // 2단계(생일)일 때만 마스크 및 숫자 키패드 적용
-//                    visualTransformation = if (currentStep == 2) DateMaskTransformation() else VisualTransformation.None,
+                    // [중요] placeholder는 제거하거나 null 처리
+                    placeholder = null,
+                    // [중요] 마스크 적용
+                    visualTransformation = if (currentStep == 2) birthdayMask else VisualTransformation.None,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = if (currentStep == 2) KeyboardType.Number else KeyboardType.Text
                     ),
@@ -260,7 +290,7 @@ fun StepInputScreen(
                                     ""
                                 }
                             },
-                            color = Color(0xFFF5A7B8),
+                            color = Color(0xFFE95053),
                             fontSize = 12.sp,
                             textAlign = TextAlign.Center
                         )
@@ -1312,7 +1342,7 @@ fun EnterCodeScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isComplete) Color.Black else Color(0xFFE0E0E0)
                 ),
-                shape = RoundedCornerShape(28.dp)
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text("연결하기", color = Color.White, fontSize = 18.sp)
             }
@@ -1387,7 +1417,7 @@ fun EnterCodeScreen(
             }
 
             if (isError) {
-                CodeErrorView(message = errorMessage) // 메시지 전달
+                CodeErrorView(message = "초대 코드를 다시 확인해 주세요.") // 메시지 전달
             }
         }
     }
@@ -1898,7 +1928,8 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 38.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (selectedMainTab == MainTab.TODAY_QUESTION) {
@@ -1971,81 +2002,6 @@ fun HomeScreen(
             }
         }
     }
-}
-
-// =================================================================================================
-// 공통 UI 컴포넌트: 3가지 업로드 상태를 처리하는 컨테이너
-// =================================================================================================
-// =================================================================================================
-// [수정됨] 공통 컨테이너: 이제 '둘 다 안 보냄'과 '둘 다 보냄' 상태 위주로 처리
-// =================================================================================================
-@Composable
-fun PhotoResponseContainer(
-    userImageUri: Uri?,
-    partnerImageUri: Uri?,
-    onUploadClick: () -> Unit,
-    uploadButtonText: String,
-    isDailyMode: Boolean
-) {
-    val isUserUploaded = userImageUri != null
-    val isPartnerUploaded = partnerImageUri != null
-
-    // 1. 둘 다 보냄 (스택형 UI)
-    if (isUserUploaded && isPartnerUploaded) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-        ) {
-            UploadedPhotoItem(
-                imageUri = partnerImageUri,
-                label = "상대방",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-            ) // 높이 지정
-            Spacer(modifier = Modifier.height(4.dp))
-            UploadedPhotoItem(
-                imageUri = userImageUri,
-                label = "나",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-            )
-        }
-    }
-    // 2. 둘 다 안 보냄 (기본 대기 상태)
-    else if (!isUserUploaded && !isPartnerUploaded) {
-        Box(
-            modifier = Modifier
-                .size(240.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color(0xFFD9D9D9))
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        Button(
-            onClick = onUploadClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF222222))
-        ) {
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_camera),
-                contentDescription = null,
-                tint = Color.White
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                uploadButtonText,
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-    // 나머지 케이스는 상위(Parent) 컴포넌트에서 별도 처리 (커스텀 UI) 했으므로 여기 올 일 없음
 }
 
 @Composable
@@ -2214,8 +2170,7 @@ fun TodayQuestionContentLegacy(
 
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(500.dp)
+                    .fillMaxSize()
                     .clip(RoundedCornerShape(32.dp))
                     .background(Color(0xFFF5F5F5))
             ) {
@@ -2285,7 +2240,7 @@ fun TodayQuestionContentLegacy(
 
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .aspectRatio(0.75f), // 이미지와 유사한 비율 유지
             shape = RoundedCornerShape(32.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -2348,7 +2303,7 @@ fun TodayQuestionContentLegacy(
                         }
                     }
 
-                    val title = if (selectedTab == MainTab.TODAY_QUESTION) "#${data.coupleQuestionId}" else "오늘의 일상"
+                    val title = if (selectedTab == MainTab.TODAY_QUESTION) "#${data.questionNumber}" else "오늘의 일상"
                     debug("title : $title, selectedTab : $selectedTab")
 
                     // [중앙 영역] 질문 정보 및 일러스트
@@ -2707,77 +2662,29 @@ fun ProfileImagePicker(
 ) {
     Box(
         modifier = Modifier
-            .size(160.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null // 클릭 효과 제거 (이미지 내부에서 처리)
-            ) { onImageClick() },
+            .size(260.dp)
+            .clip(CircleShape)
+            .clickable { onImageClick() },
         contentAlignment = Alignment.Center
     ) {
-        // 1. 메인 프로필 원형 박스
-        Box(
-            modifier = Modifier
-                .size(150.dp)
-                .background(Color(0xFFD9D9D9), CircleShape)
-                .clip(CircleShape)
-                .border(1.dp, Color(0xFFF0F0F0), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            if (uri != null) {
-                // 이미지가 있을 때: 사진 표시
-                AsyncImage(
-                    model = uri,
-                    contentDescription = "프로필 이미지",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                // 이미지가 없을 때: 기본 격자 아이콘 표시
-                Icon(
-                    painter = painterResource(id = R.drawable.photo_grid),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(100.dp)
-                )
-            }
-        }
-
-        // 2. 우측 하단 카메라 추가 버튼 (이미지가 없을 때만 표시)
-        if (uri == null) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 10.dp, end = 10.dp)
-                    .size(44.dp)
-                    .shadow(4.dp, CircleShape)
-                    .background(Color.White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.photo_add),
-                    contentDescription = "사진 추가",
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+        if (uri != null) {
+            // 4. 이미지가 있을 때: 박스에 꽉 차게 표시
+            AsyncImage(
+                model = uri,
+                contentDescription = "프로필 이미지",
+                // 부모(Box 180dp) 크기에 꽉 맞춤
+                modifier = Modifier.fillMaxSize(),
+                // 비율을 유지하면서 영역을 꽉 채움 (넘치는 부분은 잘림)
+                contentScale = ContentScale.Crop
+            )
         } else {
-            // 이미지가 있을 때 편집 모드라면 작은 카메라 아이콘 표시 (선택 사항)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 10.dp, end = 10.dp)
-                    .size(32.dp)
-                    .background(Color.White, CircleShape)
-                    .border(1.dp, Color(0xFFEEEEEE), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CameraAlt,
-                    contentDescription = "사진 변경",
-                    modifier = Modifier.size(18.dp),
-                    tint = Color.Gray
-                )
-            }
+            // 5. 이미지가 없을 때: 기본 아이콘 표시
+            Icon(
+                painter = painterResource(id = R.drawable.img_profile_person),
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(180.dp)
+            )
         }
     }
 }

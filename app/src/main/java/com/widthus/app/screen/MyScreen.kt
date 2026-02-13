@@ -218,13 +218,16 @@ fun MyMainScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 프로필 이미지 (Placeholder)
-                Box(
+                AsyncImage(
+                    model = LocalPartnerNickname.current.serverProfileUrl,
+                    contentDescription = "Profile Image",
                     modifier = Modifier
                         .size(60.dp)
                         .clip(CircleShape)
-                        .background(Color.LightGray)
+                        .background(Color.LightGray),
+                    contentScale = ContentScale.Crop // 원형에 꽉 차게 맞춤
                 )
+
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(nickName, fontSize = 18.sp, fontWeight = FontWeight.Bold)

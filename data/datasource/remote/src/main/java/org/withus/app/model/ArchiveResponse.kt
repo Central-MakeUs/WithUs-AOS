@@ -41,18 +41,17 @@ data class QuestionDetailResponse(
     val coupleQuestionId: Long,
     val questionNumber: Long,
     val questionContent: String,
-    val myInfo: UserAnswerInfo?, // 사진 삭제 시 null 가능성 대비
-    val partnerInfo: UserAnswerInfo?
+    val myInfo: UserArchiveInfo?, // 사진 삭제 시 null 가능성 대비
+    val partnerInfo: UserArchiveInfo?
 )
-
 
 // 상세 페이지용 아이템 모델 (명세서의 "selected" 반영)
 data class ArchiveDetailItem(
     val archiveType: String,
     val id: Long,
     val question: String?,
-    val myInfo: UserAnswerInfo?,
-    val partnerInfo: UserAnswerInfo?,
+    val myInfo: UserArchiveInfo?,
+    val partnerInfo: UserArchiveInfo?,
     val selected: Boolean,
 )
 
